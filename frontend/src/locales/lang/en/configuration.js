@@ -195,7 +195,8 @@ export default {
     },
     roles: {
       writer: 'Test Case Writer',
-      reviewer: 'Test Reviewer'
+      reviewer: 'Test Reviewer',
+      vision: 'Vision Model (LVM)'
     },
     messages: {
       loadFailed: 'Failed to load configurations',

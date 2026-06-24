@@ -27,7 +27,7 @@
                 <h3>{{ config.name }}</h3>
                 <div class="config-badges">
                   <span class="type-badge" :class="config.prompt_type">
-                    {{ config.prompt_type === 'writer' ? $t('promptConfig.writerPrompt') : $t('promptConfig.reviewerPrompt') }}
+                    {{ config.prompt_type === 'writer' ? $t('promptConfig.writerPrompt') : (config.prompt_type === 'reviewer' ? $t('promptConfig.reviewerPrompt') : $t('promptConfig.imageAnalyzer')) }}
                   </span>
                   <span class="status-badge" :class="{ active: config.is_active }">
                     {{ config.is_active ? $t('promptConfig.enabled') : $t('promptConfig.disabled') }}
@@ -107,6 +107,7 @@
                 <option value="">{{ $t('promptConfig.selectPromptType') }}</option>
                 <option value="writer">{{ $t('promptConfig.writerPrompt') }}</option>
                 <option value="reviewer">{{ $t('promptConfig.reviewerPrompt') }}</option>
+                <option value="vision">{{ $t('promptConfig.imageAnalyzer') }}</option>
               </select>
             </div>
 
@@ -173,7 +174,7 @@
               <div class="meta-item">
                 <label>{{ $t('promptConfig.type') }}</label>
                 <span class="type-badge" :class="previewConfig.prompt_type">
-                  {{ previewConfig.prompt_type === 'writer' ? $t('promptConfig.writerPrompt') : $t('promptConfig.reviewerPrompt') }}
+                  {{ previewConfig.prompt_type === 'writer' ? $t('promptConfig.writerPrompt') : (previewConfig.prompt_type === 'reviewer' ? $t('promptConfig.reviewerPrompt') : $t('promptConfig.imageAnalyzer')) }}
                 </span>
               </div>
               <div class="meta-item">
@@ -259,7 +260,8 @@ export default {
       previewConfig: {},
       defaultPrompts: {
         writer: '',
-        reviewer: ''
+        reviewer: '',
+        vision: ''
       },
       activeTab: 'writer',
       configForm: {
@@ -277,7 +279,7 @@ export default {
 
   methods: {
     getPromptTypeLabel(promptType) {
-      return promptType === 'writer' ? this.$t('promptConfig.writerPrompt') : this.$t('promptConfig.reviewerPrompt')
+      return promptType === 'writer' ? this.$t('promptConfig.writerPrompt') : (promptType === 'reviewer' ? this.$t('promptConfig.reviewerPrompt') : this.$t('promptConfig.imageAnalyzer'))
     },
 
     getExistingPromptConfig(promptType, excludeId = null) {
@@ -285,7 +287,7 @@ export default {
     },
 
     getMissingPromptTypes() {
-      return ['writer', 'reviewer'].filter(type => !this.getExistingPromptConfig(type))
+      return ['writer', 'reviewer', 'vision'].filter(type => !this.getExistingPromptConfig(type))
     },
 
     formatApiError(error, fallbackText) {
@@ -409,6 +411,16 @@ export default {
           })
         }
 
+        // 创建图片分析提示词配置
+        if (missingTypes.includes('vision') && this.defaultPrompts.vision) {
+          await api.post('/requirement-analysis/prompts/', {
+            name: this.$t('promptConfig.defaultVisionName'),
+            prompt_type: 'vision',
+            content: this.defaultPrompts.vision,
+            is_active: true
+          })
+        }
+
         ElMessage.success(this.$t('promptConfig.defaultsLoadSuccess'))
         this.closeDefaultsModal()
         this.loadConfigs()
@@ -512,7 +524,7 @@ export default {
 
     closeDefaultsModal() {
       this.showDefaultsModal = false
-      this.defaultPrompts = { writer: '', reviewer: '' }
+      this.defaultPrompts = { writer: '', reviewer: '', vision: '' }
       this.activeTab = 'writer'
     },
 
@@ -663,6 +675,11 @@ export default {
 .type-badge.reviewer {
   background: #fff3e0;
   color: #f57c00;
+}
+
+.type-badge.vision {
+  background: #e3f2fd;
+  color: #1976d2;
 }
 
 .status-badge {

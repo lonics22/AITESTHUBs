@@ -149,6 +149,7 @@
                 <option value="">{{ $t('configuration.aiModel.selectRole') }}</option>
                 <option value="writer">{{ $t('configuration.aiModel.roles.writer') }}</option>
                 <option value="reviewer">{{ $t('configuration.aiModel.roles.reviewer') }}</option>
+                <option value="vision">{{ $t('configuration.aiModel.roles.vision') }}</option>
               </select>
             </div>
 
@@ -1082,6 +1083,11 @@ export default {
 .role-badge.reviewer {
   background: #fff3e0;
   color: #f57c00;
+}
+
+.role-badge.vision {
+  background: #e3f2fd;
+  color: #1976d2;
 }
 
 .status-badge {
