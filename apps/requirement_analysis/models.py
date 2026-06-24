@@ -1379,8 +1379,9 @@ class AIModelService:
                     {"type": "text", "text": vision_prompt}
                 ]}]
 
-                # 调用 LVM
-                response = AIModelService.call_openai_compatible_api(lvm_config, messages)
+                # 调用 LVM（使用 asyncio.run 桥接 async 函数到 sync 上下文）
+                coro = AIModelService.call_openai_compatible_api(lvm_config, messages)
+                response = asyncio.run(coro)
                 description = response['choices'][0]['message']['content'].strip()
 
                 cache[url] = description
