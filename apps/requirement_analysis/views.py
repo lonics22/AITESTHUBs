@@ -1607,6 +1607,28 @@ class TestCaseGenerationTaskViewSet(viewsets.ModelViewSet):
                                 loop = asyncio.new_event_loop()
                                 asyncio.set_event_loop(loop)
 
+                                # === LVM 预处理：扫描需求文本中的图片并调用视觉模型分析 ===
+                                try:
+                                    lvm_config = AIModelConfig.objects.filter(role='vision', is_active=True).first()
+                                    vision_prompt = PromptConfig.get_active_config('vision')
+                                    if lvm_config and vision_prompt:
+                                        logger.info(f"任务 {task.task_id}: 检测到 LVM 配置，开始图片预处理")
+                                        task.progress = 15
+                                        task.save()
+
+                                        processed_text = loop.run_until_complete(
+                                            AIModelService.preprocess_images(
+                                                task.requirement_text, lvm_config, vision_prompt.content
+                                            )
+                                        )
+
+                                        if processed_text != task.requirement_text:
+                                            task.requirement_text = processed_text
+                                            task.save(update_fields=['requirement_text'])
+                                            logger.info(f"任务 {task.task_id}: LVM 预处理完成，已更新需求文本")
+                                except Exception as e:
+                                    logger.warning(f"任务 {task.task_id}: LVM 预处理失败，降级为纯文本处理: {e}")
+
                                 try:
                                     # 根据输出模式选择不同的生成方式
                                     if task.output_mode == 'stream':
