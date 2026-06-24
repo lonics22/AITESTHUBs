@@ -63,6 +63,18 @@ apps/app_automation/Template/**
 # 忽略本地 SQLite 数据库文件
 db.sqlite3
 
+# 忽略需求文档提取的图片上传目录，但保留.gitkeep
+media/requirement_images/*
+!media/requirement_images/.gitkeep
+
+# 忽略敏感/临时文件
+cookie.txt
+sql.sql
+_test_*.py
+_extracted*.txt
+_llm_*.txt
+_lvm_*.txt
+
 # 忽略前端文件
 frontend/node_modules/
 frontend/.DS_Store

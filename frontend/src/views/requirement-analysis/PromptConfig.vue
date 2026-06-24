@@ -215,6 +215,12 @@
                 @click="activeTab = 'reviewer'">
                 {{ $t('promptConfig.reviewerTab') }}
               </button>
+              <button
+                class="tab-btn"
+                :class="{ active: activeTab === 'vision' }"
+                @click="activeTab = 'vision'">
+                {{ $t('promptConfig.visionTab') }}
+              </button>
             </div>
 
             <div class="tab-content">

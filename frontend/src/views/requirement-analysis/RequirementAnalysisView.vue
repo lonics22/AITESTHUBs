@@ -153,6 +153,10 @@
                 :placeholder="$t('requirementAnalysis.descriptionPlaceholder')"
                 @paste="handlePaste"></textarea>
               <div class="char-count">{{ manualInput.description.length }}/2000</div>
+              <div v-if="hasImagesInDescription" class="preview-section">
+                <label class="preview-label">{{ $t('requirementAnalysis.inputPreview') }}</label>
+                <div class="preview-content" v-html="formatMarkdown(manualInput.description)"></div>
+              </div>
             </div>
 
             <div class="form-group">
@@ -472,6 +476,9 @@ export default {
       return this.manualInput.title.trim() &&
              this.manualInput.description.trim() &&
              this.manualInput.description.length <= 2000
+    },
+    hasImagesInDescription() {
+      return /!\[.*?\]\(.*?\)/.test(this.manualInput.description)
     }
   },
 
@@ -687,12 +694,17 @@ export default {
     },
 
     async handlePaste(event) {
+      // 仅处理剪贴板中的图片文件（截图工具等），不干涉文本粘贴
       const items = event.clipboardData?.items
-      if (!items) return
+      const files = event.clipboardData?.files
+      if (!items && !files) return
 
-      for (let i = 0; i < items.length; i++) {
+      // 优先从 items 检测图片类型
+      let imageProcessed = false
+      for (let i = 0; i < (items?.length || 0); i++) {
         const item = items[i]
         if (item.type.startsWith('image/')) {
+          imageProcessed = true
           event.preventDefault()
 
           if (this.pastedImageCount >= this.MAX_IMAGES) {
@@ -701,6 +713,7 @@ export default {
           }
 
           const file = item.getAsFile()
+          if (!file) continue
           if (file.size > 10 * 1024 * 1024) {
             ElMessage.warning('单张图片不能超过10MB')
             return
@@ -730,6 +743,33 @@ export default {
             ElMessage.error('图片上传失败')
           } finally {
             this.uploadingImages = false
+          }
+        }
+      }
+
+      // 降级：从 clipboardData.files 检测（部分浏览器/场景）
+      if (!imageProcessed && files?.length) {
+        for (let i = 0; i < files.length; i++) {
+          const file = files[i]
+          if (file.type.startsWith('image/')) {
+            imageProcessed = true
+            event.preventDefault()
+            // 同上处理流程...
+            if (this.pastedImageCount >= this.MAX_IMAGES) break
+            if (file.size > 10 * 1024 * 1024) continue
+            try {
+              const response = await uploadImage(file)
+              const imageUrl = response.data.file_url || response.data.url
+              const imageMarkdown = `![${file.name}](${imageUrl})`
+              const textarea = this.$el.querySelector('.form-textarea')
+              const cursorPos = textarea.selectionStart
+              const textBefore = this.manualInput.description.substring(0, cursorPos)
+              const textAfter = this.manualInput.description.substring(cursorPos)
+              this.manualInput.description = textBefore + imageMarkdown + textAfter
+              this.pastedImageCount++
+            } catch (e) {
+              console.error('图片上传失败:', e)
+            }
           }
         }
       }
@@ -2549,6 +2589,31 @@ export default {
     max-width: 300px;
     justify-content: center;
   }
+}
+
+/* 输入内容预览样式 */
+.preview-section {
+  margin-top: 12px;
+  border: 1px solid #e1e8ed;
+  border-radius: 8px;
+  background: #fafbfc;
+  overflow: hidden;
+}
+
+.preview-label {
+  display: block;
+  padding: 8px 12px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #64748b;
+  background: #f1f5f9;
+  border-bottom: 1px solid #e1e8ed;
+}
+
+.preview-content {
+  padding: 12px;
+  min-height: 40px;
+  line-height: 1.6;
 }
 
 /* 图片预览样式 */

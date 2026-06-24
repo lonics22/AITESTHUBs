@@ -4,8 +4,10 @@ import time
 import uuid
 import asyncio
 import logging
+import zipfile
 from typing import List, Dict, Any, Optional
 from datetime import datetime
+from io import BytesIO
 
 try:
     from PyPDF2 import PdfReader
@@ -26,29 +28,95 @@ logger = logging.getLogger(__name__)
 
 class DocumentProcessor:
     """文档处理服务"""
-    
+
+    # LVM 视觉模型支持的图片格式
+    SUPPORTED_IMAGE_EXTS = {'.png', '.jpg', '.jpeg', '.gif', '.webp'}
+
     @staticmethod
-    def extract_text_from_pdf(file_path: str) -> str:
-        """从PDF文件提取文本"""
+    def _save_extracted_image(image_data: bytes, doc_id: int, index: int, ext: str) -> str:
+        """保存提取的图片到 media 目录，返回 URL 路径"""
+        # 跳过空图片
+        if not image_data or len(image_data) == 0:
+            return None
+        # 跳过视觉模型不支持的格式
+        ext_lower = ext.lower()
+        if ext_lower not in DocumentProcessor.SUPPORTED_IMAGE_EXTS:
+            logger.info(f"跳过不支持的图片格式: {ext}")
+            return None
+        filename = f"doc_{doc_id}_img_{index}{ext_lower}"
+        subdir = os.path.join('requirement_images', 'extracted')
+        save_dir = os.path.join(settings.MEDIA_ROOT, subdir)
+        try:
+            os.makedirs(save_dir, exist_ok=True)
+            save_path = os.path.join(save_dir, filename)
+            with open(save_path, 'wb') as f:
+                f.write(image_data)
+            return f"/media/{subdir}/{filename}".replace('\\', '/')
+        except Exception as e:
+            logger.error(f"保存提取图片失败 [{filename}]: {e}")
+            return None
+
+    @staticmethod
+    def extract_text_from_pdf(file_path: str, doc_id: int = None) -> str:
+        """从PDF文件提取文本和内嵌图片"""
         try:
             text = ""
+            img_index = 0
             with open(file_path, 'rb') as file:
                 pdf_reader = PdfReader(file)
-                for page in pdf_reader.pages:
-                    text += page.extract_text() + "\n"
+                for page_num, page in enumerate(pdf_reader.pages):
+                    page_text = page.extract_text() or ""
+                    text += page_text + "\n"
+                    # 提取当前页中的图片
+                    if doc_id and hasattr(page, 'images'):
+                        for img in page.images:
+                            try:
+                                img_data = img.data
+                                # 推断扩展名
+                                name = (img.name or f"img{img_index}").lower()
+                                ext = os.path.splitext(name)[1] or '.png'
+                                url = DocumentProcessor._save_extracted_image(img_data, doc_id, img_index, ext)
+                                if url:
+                                    text += f"![{name}]({url})\n"
+                                img_index += 1
+                            except Exception as e:
+                                logger.warning(f"PDF图片提取失败 [第{page_num+1}页]: {e}")
+                                continue
             return text.strip()
         except Exception as e:
             logger.error(f"PDF文本提取失败: {e}")
             return f"PDF文本提取失败: {str(e)}"
     
     @staticmethod
-    def extract_text_from_docx(file_path: str) -> str:
-        """从Word文档提取文本"""
+    def extract_text_from_docx(file_path: str, doc_id: int = None) -> str:
+        """从Word文档提取文本和内嵌图片"""
         try:
             doc = docx.Document(file_path)
             text = ""
             for paragraph in doc.paragraphs:
                 text += paragraph.text + "\n"
+
+            # 提取文档中的内嵌图片（DOCX 实质是 ZIP，图片在 word/media/ 下）
+            if doc_id:
+                img_index = 0
+                try:
+                    with zipfile.ZipFile(file_path) as z:
+                        media_files = sorted([f for f in z.namelist() if f.startswith('word/media/')])
+                        for media_file in media_files:
+                            try:
+                                img_data = z.read(media_file)
+                                name = os.path.basename(media_file)
+                                ext = os.path.splitext(name)[1] or '.png'
+                                url = DocumentProcessor._save_extracted_image(img_data, doc_id, img_index, ext)
+                                if url:
+                                    text += f"![{name}]({url})\n"
+                                img_index += 1
+                            except Exception as e:
+                                logger.warning(f"DOCX图片提取失败 [{media_file}]: {e}")
+                                continue
+                except Exception as e:
+                    logger.warning(f"DOCX图片批量提取失败: {e}")
+
             return text.strip()
         except Exception as e:
             logger.error(f"Word文档文本提取失败: {e}")
@@ -73,13 +141,14 @@ class DocumentProcessor:
     
     @classmethod
     def extract_text(cls, document: RequirementDocument) -> str:
-        """根据文档类型提取文本"""
+        """根据文档类型提取文本（含内嵌图片提取）"""
         file_path = document.file.path
-        
+        doc_id = document.id
+
         if document.document_type == 'pdf':
-            return cls.extract_text_from_pdf(file_path)
+            return cls.extract_text_from_pdf(file_path, doc_id)
         elif document.document_type == 'docx':
-            return cls.extract_text_from_docx(file_path)
+            return cls.extract_text_from_docx(file_path, doc_id)
         elif document.document_type == 'txt':
             return cls.extract_text_from_txt(file_path)
         elif document.document_type == 'md':

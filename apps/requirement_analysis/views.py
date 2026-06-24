@@ -1349,6 +1349,17 @@ class PromptConfigViewSet(viewsets.ModelViewSet):
 3. **补充建议**：直接给出建议补充的测试场景或用例。
 4. **修正后的用例**（可选）：如果发现严重问题，请直接提供修正后的用例版本。"""
 
+            # 读取图片分析提示词
+            vision_prompt_path = os.path.join(settings.BASE_DIR, 'docs/tester_vision.md')
+            try:
+                with open(vision_prompt_path, 'r', encoding='utf-8') as f:
+                    defaults['vision'] = f.read()
+            except FileNotFoundError:
+                defaults['vision'] = '''任务目标：这个图片来自软件开发需求文档。请求识别它是流程图还是界面原型图。同时通过文字对它的内容进行描述。
+
+输出要求：只需要输出类型和对它内容的描述，不要输出其他无关内容和评价。
+输出的开头为："原型图界面描述：" 或 "流程图描述："'''
+
             return Response({
                 'message': '默认提示词加载成功',
                 'defaults': defaults

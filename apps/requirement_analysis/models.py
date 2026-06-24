@@ -1365,10 +1365,20 @@ class AIModelService:
                     image_data = response.content
 
                 # 转为 base64
+                if not image_data or len(image_data) == 0:
+                    logger.warning(f"图片内容为空，跳过: {url[:50]}")
+                    return None
+
+                # 检查图片格式是否支持
+                ext = os.path.splitext(url.split('?')[0])[1].lower()
+                supported_exts = {'.png', '.jpg', '.jpeg', '.gif', '.webp'}
+                if ext not in supported_exts:
+                    logger.warning(f"不支持的图片格式，跳过: {ext}")
+                    return None
+
                 image_base64 = base64.b64encode(image_data).decode('utf-8')
 
                 # 获取图片格式
-                ext = os.path.splitext(url.split('?')[0])[1].lower()
                 mime_map = {'.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg',
                            '.gif': 'image/gif', '.webp': 'image/webp'}
                 mime_type = mime_map.get(ext, 'image/png')
