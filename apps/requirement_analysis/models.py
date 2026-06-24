@@ -420,6 +420,23 @@ class TestCaseGenerationTask(models.Model):
         return f"{self.title} - {self.get_status_display()}"
 
 
+class RequirementImage(models.Model):
+    """需求分析上传的图片模型"""
+    file = models.ImageField(upload_to='requirement_images/%Y/%m/', verbose_name='图片文件')
+    filename = models.CharField(max_length=255, verbose_name='原始文件名')
+    description = models.TextField(blank=True, verbose_name='LVM识别描述')
+    uploaded_by = models.ForeignKey(User, on_delete=models.CASCADE, verbose_name='上传者')
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name='创建时间')
+
+    class Meta:
+        db_table = 'requirement_images'
+        verbose_name = '需求图片'
+        verbose_name_plural = '需求图片'
+
+    def __str__(self):
+        return self.filename
+
+
 class AIModelService:
     """AI模型服务类"""
 

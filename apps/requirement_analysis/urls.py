@@ -12,7 +12,8 @@ from .views import (
     TestCaseGenerationTaskViewSet,
     ConfigStatusViewSet,
     upload_and_analyze,
-    analyze_text
+    analyze_text,
+    UploadImageView
 )
 
 # 创建DRF路由器
@@ -35,6 +36,7 @@ urlpatterns = [
     path('', include(router.urls)),
 
     # 特殊API端点
+    path('upload-image/', UploadImageView.as_view(), name='upload-image'),
     path('upload-and-analyze/', upload_and_analyze, name='upload-and-analyze'),
     path('analyze-text/', analyze_text, name='analyze-text'),
 ]

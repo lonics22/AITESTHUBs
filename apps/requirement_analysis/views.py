@@ -10,6 +10,7 @@ from rest_framework.decorators import action, permission_classes
 from rest_framework.response import Response
 from rest_framework.renderers import BaseRenderer
 from rest_framework.permissions import AllowAny
+from rest_framework.views import APIView
 
 
 class PassThroughRenderer(BaseRenderer):
@@ -34,7 +35,7 @@ from django.db import models
 from .models import (
     RequirementDocument, RequirementAnalysis, BusinessRequirement,
     GeneratedTestCase, AnalysisTask, AIModelConfig, PromptConfig, TestCaseGenerationTask,
-    GenerationConfig, AIModelService
+    GenerationConfig, AIModelService, RequirementImage
 )
 from .serializers import (
     RequirementDocumentSerializer, RequirementAnalysisSerializer,
@@ -42,11 +43,42 @@ from .serializers import (
     AnalysisTaskSerializer, DocumentUploadSerializer,
     TestCaseGenerationRequestSerializer, TestCaseReviewRequestSerializer,
     AIModelConfigSerializer, PromptConfigSerializer, TestCaseGenerationTaskSerializer,
-    GenerationConfigSerializer
+    GenerationConfigSerializer, RequirementImageSerializer
 )
 from .services import RequirementAnalysisService, DocumentProcessor
 
 logger = logging.getLogger(__name__)
+
+
+class UploadImageView(APIView):
+    """图片上传视图"""
+    parser_classes = [MultiPartParser, FormParser]
+
+    def post(self, request):
+        file = request.FILES.get('file')
+        if not file:
+            return Response({'error': '请选择要上传的图片'}, status=status.HTTP_400_BAD_REQUEST)
+
+        # 验证文件类型
+        ext = os.path.splitext(file.name)[1].lower()
+        allowed_extensions = ['.png', '.jpg', '.jpeg', '.gif', '.webp']
+        if ext not in allowed_extensions:
+            return Response({'error': f'不支持的图片格式: {ext}，支持: png/jpg/gif/webp'},
+                            status=status.HTTP_400_BAD_REQUEST)
+
+        # 验证文件大小 (10MB)
+        if file.size > 10 * 1024 * 1024:
+            return Response({'error': '图片大小不能超过10MB'}, status=status.HTTP_400_BAD_REQUEST)
+
+        # 创建记录
+        image = RequirementImage.objects.create(
+            file=file,
+            filename=file.name,
+            uploaded_by=request.user
+        )
+
+        serializer = RequirementImageSerializer(image, context={'request': request})
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
 
 
 class RequirementDocumentViewSet(viewsets.ModelViewSet):

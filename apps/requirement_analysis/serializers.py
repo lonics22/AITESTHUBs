@@ -2,7 +2,7 @@ from rest_framework import serializers
 from .models import (
     RequirementDocument, RequirementAnalysis, BusinessRequirement,
     GeneratedTestCase, AnalysisTask, AIModelConfig, PromptConfig, TestCaseGenerationTask,
-    GenerationConfig
+    GenerationConfig, RequirementImage
 )
 
 
@@ -117,6 +117,22 @@ class DocumentUploadSerializer(serializers.ModelSerializer):
         validated_data['file_size'] = file.size
         
         return super().create(validated_data)
+
+
+class RequirementImageSerializer(serializers.ModelSerializer):
+    """需求图片序列化器"""
+    file_url = serializers.SerializerMethodField()
+
+    class Meta:
+        model = RequirementImage
+        fields = ['id', 'file', 'file_url', 'filename', 'description', 'created_at']
+        read_only_fields = ['id', 'file_url', 'filename', 'description', 'created_at']
+
+    def get_file_url(self, obj):
+        request = self.context.get('request')
+        if obj.file and request:
+            return request.build_absolute_uri(obj.file.url)
+        return None
 
 
 class TestCaseGenerationRequestSerializer(serializers.Serializer):
