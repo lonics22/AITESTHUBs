@@ -134,7 +134,8 @@
                 v-model="manualInput.description"
                 class="form-textarea"
                 rows="8"
-                :placeholder="$t('requirementAnalysis.descriptionPlaceholder')"></textarea>
+                :placeholder="$t('requirementAnalysis.descriptionPlaceholder')"
+                @paste="handlePaste"></textarea>
               <div class="char-count">{{ manualInput.description.length }}/2000</div>
             </div>
 
@@ -343,6 +344,7 @@ import api from '@/utils/api'
 import { ElMessage } from 'element-plus'
 import * as XLSX from 'xlsx'
 import { useUserStore } from '@/stores/user'
+import { uploadImage } from '@/api/requirement-analysis'
 
 export default {
   name: 'RequirementAnalysisView',
@@ -426,7 +428,12 @@ export default {
       },
       showConfigGuide: false,
       checkingConfig: true,
-      modalKey: 0  // 用于强制重新渲染弹窗
+      modalKey: 0,  // 用于强制重新渲染弹窗
+
+      // 图片上传相关
+      uploadingImages: false,
+      pastedImageCount: 0,
+      MAX_IMAGES: 20
     }
   },
 
@@ -649,6 +656,55 @@ export default {
       this.$refs.fileInput.value = ''
     },
 
+    async handlePaste(event) {
+      const items = event.clipboardData?.items
+      if (!items) return
+
+      for (let i = 0; i < items.length; i++) {
+        const item = items[i]
+        if (item.type.startsWith('image/')) {
+          event.preventDefault()
+
+          if (this.pastedImageCount >= this.MAX_IMAGES) {
+            ElMessage.warning(`最多支持 ${this.MAX_IMAGES} 张图片`)
+            return
+          }
+
+          const file = item.getAsFile()
+          if (file.size > 10 * 1024 * 1024) {
+            ElMessage.warning('单张图片不能超过10MB')
+            return
+          }
+
+          this.uploadingImages = true
+          try {
+            const response = await uploadImage(file)
+            const imageUrl = response.data.file_url || response.data.url
+            const imageMarkdown = `![${file.name}](${imageUrl})`
+
+            const textarea = this.$el.querySelector('.form-textarea')
+            const cursorPos = textarea.selectionStart
+            const textBefore = this.manualInput.description.substring(0, cursorPos)
+            const textAfter = this.manualInput.description.substring(cursorPos)
+            this.manualInput.description = textBefore + imageMarkdown + textAfter
+
+            this.$nextTick(() => {
+              textarea.selectionStart = cursorPos + imageMarkdown.length
+              textarea.selectionEnd = cursorPos + imageMarkdown.length
+              textarea.focus()
+            })
+
+            this.pastedImageCount++
+          } catch (error) {
+            console.error('图片上传失败:', error)
+            ElMessage.error('图片上传失败')
+          } finally {
+            this.uploadingImages = false
+          }
+        }
+      }
+    },
+
     formatFileSize(bytes) {
       if (bytes === 0) return '0 Bytes'
       const k = 1024
@@ -720,6 +776,7 @@ export default {
     },
 
     async startGeneration(title, requirementText, projectId, outputMode = 'stream') {
+      this.pastedImageCount = 0;
       // 在开始生成前，主动刷新token确保生成过程中不会过期
       try {
         const userStore = useUserStore()
@@ -1173,6 +1230,7 @@ export default {
     },
 
     resetGeneration() {
+      this.pastedImageCount = 0;
       // 重置生成状态
       this.isGenerating = false;
       this.currentTaskId = null;
@@ -1222,6 +1280,9 @@ export default {
           .replace(/&/g, '&amp;')
           .replace(/</g, '&lt;')
           .replace(/>/g, '&gt;');
+
+      // 渲染图片 ![alt](url) -> <img>
+      html = html.replace(/!\[(.*?)\]\((.*?)\)/g, '<div class="image-container"><img src="$2" alt="$1" class="preview-image" onclick="window.open(\'$2\',\'_blank\')"></div>');
 
       // 转换Markdown语法
       // 标题 #
@@ -2458,6 +2519,26 @@ export default {
     max-width: 300px;
     justify-content: center;
   }
+}
+
+/* 图片预览样式 */
+.image-container {
+  margin: 10px 0;
+  text-align: center;
+}
+
+.preview-image {
+  max-width: 100%;
+  max-height: 500px;
+  border: 1px solid #e1e8ed;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  cursor: zoom-in;
+  transition: transform 0.2s ease;
+}
+
+.preview-image:hover {
+  transform: scale(1.02);
 }
 </style>
 

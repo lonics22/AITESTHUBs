@@ -147,3 +147,19 @@ export function deletePromptConfig(id) {
     method: 'delete'
   })
 }
+
+// ==================== 图片上传 ====================
+
+// 上传需求图片
+export function uploadImage(file) {
+  const formData = new FormData()
+  formData.append('file', file)
+  return request({
+    url: '/requirement-analysis/upload-image/',
+    method: 'post',
+    data: formData,
+    headers: {
+      'Content-Type': 'multipart/form-data'
+    }
+  })
+}
