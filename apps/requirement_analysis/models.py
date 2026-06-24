@@ -7,6 +7,10 @@ import httpx
 import asyncio
 from typing import Dict, Any, List, AsyncIterator
 import logging
+import os
+import base64
+import tempfile
+from concurrent.futures import ThreadPoolExecutor
 
 logger = logging.getLogger(__name__)
 
@@ -1295,3 +1299,123 @@ class AIModelService:
         logger.info(f"重新编号完成: 共{total_cases}条测试用例，编号范围: {prefix}001-{prefix}{total_cases:03d}")
 
         return renumbered_content
+
+    @staticmethod
+    async def preprocess_images(requirement_text: str, lvm_config: 'AIModelConfig', vision_prompt: str) -> str:
+        """
+        扫描需求文本中的图片标记，并发调用 LVM 识别并替换为文字描述。
+
+        Args:
+            requirement_text: 包含 ![alt](url) 标记的需求文本
+            lvm_config: 视觉模型配置（role='vision' 的 AIModelConfig）
+            vision_prompt: 图片分析提示词
+
+        Returns:
+            处理后的文本，图片标记被替换为 LVM 描述文本
+        """
+        import re
+        if not requirement_text:
+            return requirement_text
+
+        # 匹配 Markdown 图片语法: ![alt](url)
+        image_pattern = re.compile(r'!\[(.*?)\]\((.*?)\)')
+        matches = list(image_pattern.finditer(requirement_text))
+
+        if not matches:
+            return requirement_text
+
+        logger.info(f"发现 {len(matches)} 张图片需要 LVM 分析")
+
+        # 用于存储替换结果
+        replacements = {}
+        cache = {}  # URL -> description 缓存
+
+        def process_single_image(match):
+            """处理单张图片：下载 -> base64 -> LVM调用 -> 获取描述"""
+            alt_text = match.group(1)
+            url = match.group(2)
+
+            # 缓存命中
+            if url in cache:
+                return cache[url]
+
+            try:
+                # 下载图片
+                import httpx
+                if url.startswith('/media/'):
+                    # 本地 media 文件
+                    from django.conf import settings
+                    local_path = str(settings.BASE_DIR) + url
+                    if os.path.exists(local_path):
+                        with open(local_path, 'rb') as f:
+                            image_data = f.read()
+                    else:
+                        # 尝试 MEDIA_ROOT
+                        media_path = str(settings.MEDIA_ROOT) + url.replace('/media', '')
+                        if os.path.exists(media_path):
+                            with open(media_path, 'rb') as f:
+                                image_data = f.read()
+                        else:
+                            logger.warning(f"图片文件不存在: {url}")
+                            return None
+                else:
+                    # 远程 URL
+                    response = httpx.get(url, timeout=30)
+                    response.raise_for_status()
+                    image_data = response.content
+
+                # 转为 base64
+                image_base64 = base64.b64encode(image_data).decode('utf-8')
+
+                # 获取图片格式
+                ext = os.path.splitext(url.split('?')[0])[1].lower()
+                mime_map = {'.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg',
+                           '.gif': 'image/gif', '.webp': 'image/webp'}
+                mime_type = mime_map.get(ext, 'image/png')
+
+                # 构建 multimodal 消息
+                messages = [{"role": "user", "content": [
+                    {"type": "image_url", "image_url": {"url": f"data:{mime_type};base64,{image_base64}"}},
+                    {"type": "text", "text": vision_prompt}
+                ]}]
+
+                # 调用 LVM
+                response = AIModelService.call_openai_compatible_api(lvm_config, messages)
+                description = response['choices'][0]['message']['content'].strip()
+
+                cache[url] = description
+                logger.info(f"LVM 分析图片成功: {alt_text or url[:50]} -> {description[:50]}...")
+                return description
+
+            except Exception as e:
+                logger.error(f"LVM 分析图片失败 [{url[:50]}]: {e}")
+                return None
+
+        # 并发处理所有图片
+        loop = asyncio.get_event_loop()
+        with ThreadPoolExecutor(max_workers=3) as executor:
+            futures = []
+            for match in matches:
+                futures.append(loop.run_in_executor(executor, process_single_image, match))
+
+            results = await asyncio.gather(*futures, return_exceptions=True)
+
+            for i, result in enumerate(results):
+                if isinstance(result, Exception):
+                    logger.error(f"图片处理异常: {result}")
+                    continue
+                if result:
+                    replacements[matches[i].group(0)] = f"> {result}"
+
+        # 执行替换
+        processed_text = requirement_text
+        for original, replacement in replacements.items():
+            processed_text = processed_text.replace(original, replacement)
+
+        unchanged = len(matches) - len(replacements)
+        if unchanged > 0:
+            logger.info(f"LVM 预处理完成: 成功 {len(replacements)} 张, 失败 {unchanged} 张")
+        else:
+            logger.info(f"LVM 预处理完成: 全部 {len(replacements)} 张图片处理成功")
+
+        return processed_text
