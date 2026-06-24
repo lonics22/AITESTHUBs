@@ -39,6 +39,14 @@
               <span class="status-text" v-if="!configStatus.reviewer_model.configured">{{ $t('configGuide.unconfigured') }}</span>
               <span class="status-text warning" v-else-if="!configStatus.reviewer_model.enabled">{{ $t('configGuide.disabled') }}</span>
             </div>
+
+            <div class="config-item-inline" :class="getConfigItemClass('lvm_model')">
+              <span class="status-symbol" v-html="getStatusSymbol('lvm_model')"></span>
+              <span class="config-label">{{ $t('configGuide.visionModel') }}</span>
+              <span class="config-name" v-if="configStatus.lvm_model.name">{{ configStatus.lvm_model.name }}</span>
+              <span class="status-text" v-if="!configStatus.lvm_model.configured">{{ $t('configGuide.unconfigured') }}</span>
+              <span class="status-text warning" v-else-if="!configStatus.lvm_model.enabled">{{ $t('configGuide.disabled') }}</span>
+            </div>
           </div>
         </div>
 
@@ -60,6 +68,14 @@
               <span class="config-name" v-if="configStatus.reviewer_prompt.name">{{ configStatus.reviewer_prompt.name }}</span>
               <span class="status-text" v-if="!configStatus.reviewer_prompt.configured">{{ $t('configGuide.unconfigured') }}</span>
               <span class="status-text warning" v-else-if="!configStatus.reviewer_prompt.enabled">{{ $t('configGuide.disabled') }}</span>
+            </div>
+
+            <div class="config-item-inline" :class="getConfigItemClass('vision_prompt')">
+              <span class="status-symbol" v-html="getStatusSymbol('vision_prompt')"></span>
+              <span class="config-label">{{ $t('configGuide.imageAnalysis') }}</span>
+              <span class="config-name" v-if="configStatus.vision_prompt.name">{{ configStatus.vision_prompt.name }}</span>
+              <span class="status-text" v-if="!configStatus.vision_prompt.configured">{{ $t('configGuide.unconfigured') }}</span>
+              <span class="status-text warning" v-else-if="!configStatus.vision_prompt.enabled">{{ $t('configGuide.disabled') }}</span>
             </div>
           </div>
         </div>
@@ -424,6 +440,20 @@ export default {
           id: null,
           required: true,
           default_output_mode: null
+        },
+        lvm_model: {
+          configured: false,
+          enabled: false,
+          name: null,
+          id: null,
+          required: false
+        },
+        vision_prompt: {
+          configured: false,
+          enabled: false,
+          name: null,
+          id: null,
+          required: false
         }
       },
       showConfigGuide: false,

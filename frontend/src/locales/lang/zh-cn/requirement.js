@@ -628,6 +628,8 @@ export default {
     caseWriter: '用例编写',
     caseReviewer: '用例评审',
     generationSettings: '生成配置',
+    imageAnalysis: '图片分析',
+    visionModel: '视觉模型',
     // 状态文本
     unconfigured: '未配置',
     disabled: '已禁用',

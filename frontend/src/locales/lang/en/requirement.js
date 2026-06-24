@@ -628,6 +628,8 @@ export default {
     caseWriter: 'Case Writer',
     caseReviewer: 'Case Reviewer',
     generationSettings: 'Generation Settings',
+    imageAnalysis: 'Image Analysis',
+    visionModel: 'Vision Model',
     // Status Text
     unconfigured: 'Not Configured',
     disabled: 'Disabled',
