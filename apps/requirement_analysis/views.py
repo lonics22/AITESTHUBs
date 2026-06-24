@@ -3282,6 +3282,24 @@ class ConfigStatusViewSet(viewsets.ViewSet):
                 is_active=False
             ).first()
 
+            # 检查LVM模型配置
+            lvm_model_enabled = AIModelConfig.objects.filter(
+                role='vision', is_active=True
+            ).first()
+
+            lvm_model_disabled = AIModelConfig.objects.filter(
+                role='vision', is_active=False
+            ).first()
+
+            # 检查视觉分析提示词
+            vision_prompt_enabled = PromptConfig.objects.filter(
+                prompt_type='vision', is_active=True
+            ).first()
+
+            vision_prompt_disabled = PromptConfig.objects.filter(
+                prompt_type='vision', is_active=False
+            ).first()
+
             # 判断必需配置（writer）
             writer_configured = (
                     writer_model_enabled is not None and
@@ -3372,7 +3390,25 @@ class ConfigStatusViewSet(viewsets.ViewSet):
                     'required': True,
                     'default_output_mode': generation_config.default_output_mode if generation_config else None,
                     'enable_auto_review': generation_config.enable_auto_review if generation_config else None
-                }
+                },
+                'lvm_model': {
+                    'configured': lvm_model_enabled is not None or lvm_model_disabled is not None,
+                    'enabled': lvm_model_enabled is not None,
+                    'name': (lvm_model_enabled or lvm_model_disabled).name if (
+                            lvm_model_enabled or lvm_model_disabled) else None,
+                    'id': (lvm_model_enabled or lvm_model_disabled).id if (
+                            lvm_model_enabled or lvm_model_disabled) else None,
+                    'required': False
+                },
+                'vision_prompt': {
+                    'configured': vision_prompt_enabled is not None or vision_prompt_disabled is not None,
+                    'enabled': vision_prompt_enabled is not None,
+                    'name': (vision_prompt_enabled or vision_prompt_disabled).name if (
+                            vision_prompt_enabled or vision_prompt_disabled) else None,
+                    'id': (vision_prompt_enabled or vision_prompt_disabled).id if (
+                            vision_prompt_enabled or vision_prompt_disabled) else None,
+                    'required': False
+                },
             }
 
             return Response(response_data, status=status.HTTP_200_OK)
