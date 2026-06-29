@@ -2935,7 +2935,9 @@ class AIImportViewSet(viewsets.GenericViewSet):
     @action(detail=True, methods=['post'])
     def answers(self, request, pk=None):
         """提交用户回答并触发 AI 生成请求数据"""
-        task = self.get_object()
+        task = AIImportTask.objects.select_for_update().get(
+            pk=pk, created_by=request.user
+        )
         serializer = AIImportAnswersSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
@@ -2980,7 +2982,9 @@ class AIImportViewSet(viewsets.GenericViewSet):
     @action(detail=True, methods=['post'])
     def save(self, request, pk=None):
         """将生成的 API 请求保存到数据库（创建 ApiCollection + ApiRequest）"""
-        task = self.get_object()
+        task = AIImportTask.objects.select_for_update().get(
+            pk=pk, created_by=request.user
+        )
 
         if task.status != 'completed':
             return Response(
