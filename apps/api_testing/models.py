@@ -636,3 +636,66 @@ class AIServiceConfig(models.Model):
 
     def __str__(self):
         return self.name
+
+
+class AIImportTask(models.Model):
+    """AI导入任务模型——跟踪整个导入工作流的状态"""
+    IMPORT_STATUS_CHOICES = [
+        ('uploading', '上传中'),
+        ('parsing', '解析文档中'),
+        ('analyzing', 'AI分析中'),
+        ('waiting_user', '等待用户配置'),
+        ('generating', 'AI生成中'),
+        ('completed', '已完成'),
+        ('failed', '失败'),
+    ]
+
+    project = models.ForeignKey(
+        'ApiProject', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='ai_import_tasks', verbose_name='关联项目'
+    )
+    collection = models.ForeignKey(
+        'ApiCollection', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='ai_import_tasks', verbose_name='关联集合'
+    )
+    status = models.CharField(
+        max_length=20, choices=IMPORT_STATUS_CHOICES, default='uploading',
+        verbose_name='任务状态'
+    )
+    doc_type = models.CharField(
+        max_length=30, blank=True, verbose_name='文档类型',
+        help_text='swagger2/openapi3/postman/har'
+    )
+    raw_content = models.JSONField(default=dict, verbose_name='原始文档内容')
+    parsed_endpoints = models.JSONField(default=list, verbose_name='解析后的端点列表')
+    ai_classification = models.JSONField(default=dict, verbose_name='AI分类结果')
+    ai_questions = models.JSONField(default=list, verbose_name='AI生成的问题列表')
+    user_answers = models.JSONField(default=dict, verbose_name='用户回答')
+    auto_structure = models.BooleanField(
+        default=True, verbose_name='按标签自动建立集合结构'
+    )
+    target_collection_id = models.IntegerField(
+        null=True, blank=True, verbose_name='目标集合ID'
+    )
+    environment_vars = models.JSONField(
+        default=dict, verbose_name='环境变量映射',
+        help_text='{ "original_value": "{{var_name}}" }'
+    )
+    generated_summary = models.JSONField(
+        default=dict, verbose_name='生成结果摘要',
+        help_text='包含 collections_created, requests_created 等'
+    )
+    error_message = models.TextField(blank=True, verbose_name='错误信息')
+    progress = models.IntegerField(default=0, verbose_name='进度百分比')
+    created_by = models.ForeignKey(User, on_delete=models.CASCADE, verbose_name='创建者')
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name='创建时间')
+    updated_at = models.DateTimeField(auto_now=True, verbose_name='更新时间')
+
+    class Meta:
+        db_table = 'api_ai_import_tasks'
+        verbose_name = 'AI导入任务'
+        verbose_name_plural = 'AI导入任务'
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"AI导入-{self.doc_type or '未知格式'} ({self.get_status_display()})"
