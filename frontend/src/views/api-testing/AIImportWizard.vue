@@ -184,7 +184,7 @@
 
             <!-- multi_param type -->
             <div v-else-if="question.field_type === 'multi_param'" class="multi-param-table">
-              <el-table :data="question.params || []" size="small" max-height="400">
+              <el-table :data="question.options || []" size="small" max-height="400">
                 <el-table-column :label="$t('apiTesting.aiImport.paramName')" prop="param_name" width="160" />
                 <el-table-column :label="$t('apiTesting.aiImport.location')" prop="location" width="100">
                   <template #default="{ row }">
@@ -465,7 +465,7 @@ const loadQuestions = async () => {
       if (q.field_type === 'string' || q.field_type === 'select') {
         initAnswers[q.param_name] = q.default_value || ''
       } else if (q.field_type === 'multi_param') {
-        q.params = (q.params || []).map((p) => ({
+        q.options = (q.options || []).map((p) => ({
           ...p,
           user_value: p.default_value || p.user_value || ''
         }))
@@ -574,7 +574,7 @@ const handleConfigure = async () => {
   await configureImport(taskId.value, {
     project_id: configForm.project_id,
     auto_structure: configForm.auto_structure,
-    collection_id: configForm.collection_id
+    target_collection_id: configForm.collection_id
   })
 }
 
@@ -602,7 +602,7 @@ const handleSubmitAnswers = async () => {
   questions.value.forEach((q) => {
     if (q.field_type === 'multi_param') {
       // Each param's value is embedded in the row
-      userAnswers[q.param_name] = (q.params || []).map((p) => ({
+      userAnswers[q.id] = (q.options || []).map((p) => ({
         param_name: p.param_name,
         location: p.location,
         value: p.user_value || p.value

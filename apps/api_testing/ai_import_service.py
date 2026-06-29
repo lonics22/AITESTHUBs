@@ -592,6 +592,19 @@ def _replace_env_vars(
     return value
 
 
+def _apply_env_vars(value: str, env_vars: Dict[str, str]) -> str:
+    """Apply environment variable mapping to a value.
+
+    Replaces any occurrence of an env-var original value with the
+    ``{{var_key}}`` template syntax.
+    """
+    if not env_vars or not value:
+        return value
+    for original, var_key in env_vars.items():
+        value = value.replace(original, f'{{{{{var_key}}}}}')
+    return value
+
+
 def _lookup_user_value(
     param_name: str,
     endpoint_key: str,
@@ -600,41 +613,35 @@ def _lookup_user_value(
 ) -> str:
     """Look up a user-provided value for a given parameter.
 
-    Checks ``user_answers`` (flat or nested under ``param_value`` key), then
+    Checks ``user_answers`` (flat or nested under question IDs), then
     applies env-var replacement.
     """
-    # Try nested param_value section
-    param_answer_section = None
-    for key, val in user_answers.items():
-        # Match question IDs that start with q_ for param_value
-        if isinstance(val, dict) and "param_values" in val:
-            param_answer_section = val
-            break
-        # The whole answer might be keyed by category
-        if key in ("param_value", "q_param_value") and isinstance(val, dict):
-            param_answer_section = val
-            break
+    # Case 1: direct param_name match at top level
+    if param_name in user_answers:
+        raw = user_answers[param_name]
+        return _apply_env_vars(str(raw), environment_vars) if not isinstance(raw, (list, dict)) else None
 
-    lookup_key = f"{endpoint_key}|{param_name}"
+    # Case 2: endpoint_key|param_name format
+    key = f"{endpoint_key}|{param_name}"
+    if key in user_answers:
+        return str(user_answers[key])
 
-    if param_answer_section is not None:
-        # Check structured param_values list
-        param_values = param_answer_section.get("param_values", [])
-        if isinstance(param_values, list):
-            for entry in param_values:
-                if isinstance(entry, dict) and entry.get("param_name") == param_name:
-                    raw = entry.get("value", "")
-                    return _replace_env_vars(raw, environment_vars) if raw else ""
+    # Case 3: scan all values for lists of param objects (multi_param answers)
+    for qid, value in user_answers.items():
+        if isinstance(value, list) and len(value) > 0:
+            if isinstance(value[0], dict) and 'param_name' in value[0]:
+                for item in value:
+                    if item.get('param_name') == param_name:
+                        raw = item.get('value', '')
+                        return _apply_env_vars(str(raw), environment_vars) if raw else ""
 
-        # Check flat key-value map
-        raw = param_answer_section.get(param_name) or param_answer_section.get(lookup_key)
-        if raw is not None:
-            return _replace_env_vars(str(raw), environment_vars)
-
-    # Flat lookup in user_answers
-    raw = user_answers.get(param_name) or user_answers.get(lookup_key)
-    if raw is not None:
-        return _replace_env_vars(str(raw), environment_vars)
+    # Case 4: nested dict under recognized section keys (backward compat)
+    for section_key in ("param_value", "q_param_value"):
+        section = user_answers.get(section_key)
+        if isinstance(section, dict):
+            raw = section.get(param_name)
+            if raw is not None and isinstance(raw, str):
+                return _apply_env_vars(raw, environment_vars) if raw else ""
 
     return ""
 
