@@ -564,7 +564,7 @@ const nextStep = async () => {
 }
 
 const prevStep = () => {
-  if (currentStep.value > 0 && currentStep.value !== 2) {
+  if (currentStep.value > 0) {
     currentStep.value--
   }
 }
@@ -586,6 +586,10 @@ const handleAutoAnalysis = async () => {
     // No questions to answer, go straight to generate
     currentStep.value = 4
     await handleGenerate()
+  } else {
+    // Analysis failed — let the user retry from config
+    ElMessage.warning(t('apiTesting.messages.error.loadFailed'))
+    currentStep.value = 1
   }
 }
 
