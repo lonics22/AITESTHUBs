@@ -238,6 +238,11 @@ const routes = [
                 path: 'notification-logs',
                 name: 'ApiNotificationLogs',
                 component: NotificationLogs
+            },
+            {
+                path: 'ai-import',
+                name: 'ApiAIImport',
+                component: () => import('@/views/api-testing/AIImportWizard.vue'),
             }
         ]
     },

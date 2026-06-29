@@ -885,5 +885,42 @@ export default {
       deleteTitle: 'Confirm Delete',
       clearTitle: 'Confirm Clear'
     }
+  },
+
+  aiImport: {
+    title: 'AI Import',
+    stepUpload: 'Upload Document',
+    stepConfig: 'Configure Project',
+    stepAnalysis: 'AI Analysis',
+    stepQuestions: 'Configure Values',
+    stepGenerate: 'Generating',
+    stepResults: 'Complete',
+    dropFileHint: 'Drag & drop API document here, or click to select',
+    supportedFormats: 'Supported: Swagger 2.0, OpenAPI 3.0, Postman Collection, HAR',
+    endpointsFound: 'endpoints found',
+    selectProject: 'Select Project',
+    structureMode: 'Import Structure',
+    autoStructureLabel: 'Auto-organize by tags',
+    autoStructureTip: 'Create collections based on doc tags',
+    specificCollectionLabel: 'Import to specific collection',
+    selectCollection: 'Select Target Collection',
+    questionsHint: 'AI analyzed all endpoints. Parameters below need your input.',
+    inputPlaceholder: 'Enter value or {{variable_name}}',
+    paramName: 'Parameter',
+    location: 'Location',
+    endpoint: 'Endpoint',
+    description: 'Description',
+    value: 'Value',
+    originalValue: 'Original value',
+    varNamePlaceholder: 'variable_name',
+    addVariable: 'Add Variable',
+    saveSuccess: 'Successfully created {count} API requests',
+    viewResult: 'View Results',
+    importMore: 'Import More',
+    prev: 'Previous',
+    next: 'Next',
+    generateProgress: 'Generating API requests...',
+    generateComplete: 'Generation complete',
+    analyzing: 'AI is analyzing endpoints...'
   }
 }

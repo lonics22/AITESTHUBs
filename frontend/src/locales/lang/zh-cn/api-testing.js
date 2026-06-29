@@ -896,5 +896,42 @@ export default {
       deleteTitle: '确认删除',
       clearTitle: '确认清空'
     }
+  },
+
+  aiImport: {
+    title: 'AI 导入',
+    stepUpload: '上传文档',
+    stepConfig: '项目配置',
+    stepAnalysis: 'AI 分析',
+    stepQuestions: '参数配置',
+    stepGenerate: '生成中',
+    stepResults: '完成',
+    dropFileHint: '拖拽 API 文档到此处，或点击上传',
+    supportedFormats: '支持格式：Swagger 2.0、OpenAPI 3.0、Postman Collection、HAR',
+    endpointsFound: '个端点',
+    selectProject: '选择项目',
+    structureMode: '导入结构',
+    autoStructureLabel: '按标签自动分组',
+    autoStructureTip: '根据文档标签自动创建对应的集合',
+    specificCollectionLabel: '导入到指定集合',
+    selectCollection: '选择目标集合',
+    questionsHint: 'AI 已分析完所有端点，以下参数需要您确认',
+    inputPlaceholder: '输入值或 {{变量名}}',
+    paramName: '参数名',
+    location: '位置',
+    endpoint: '端点',
+    description: '描述',
+    value: '值',
+    originalValue: '原始值',
+    varNamePlaceholder: '变量名',
+    addVariable: '添加变量',
+    saveSuccess: '成功创建 {count} 个 API 请求',
+    viewResult: '查看结果',
+    importMore: '继续导入',
+    prev: '上一步',
+    next: '下一步',
+    generateProgress: '正在生成 API 请求...',
+    generateComplete: '生成完成',
+    analyzing: 'AI 正在分析端点...'
   }
 }
