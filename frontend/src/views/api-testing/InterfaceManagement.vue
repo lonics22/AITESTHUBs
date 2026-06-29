@@ -196,6 +196,9 @@
                   <template #dropdown>
                     <el-dropdown-menu>
                       <el-dropdown-item @click="importCurl">{{ $t('apiTesting.interface.importCurl') }}</el-dropdown-item>
+                      <el-dropdown-item @click="goToAIImport">
+                        🤖 {{ $t('apiTesting.aiImport.title') }}
+                      </el-dropdown-item>
                       <el-dropdown-item @click="exportRequest">{{ $t('apiTesting.interface.exportCurl') }}</el-dropdown-item>
                     </el-dropdown-menu>
                   </template>
@@ -941,8 +944,10 @@ import { getVariableFunctions } from '@/api/data-factory'
 import { CodeGenerator } from '@/utils/codeGenerator'
 import { debounce } from 'lodash-es'
 import { useI18n } from 'vue-i18n'
+import { useRouter } from 'vue-router'
 
 const { t } = useI18n()
+const router = useRouter()
 
 const treeRef = ref(null)
 const expandedKeys = ref([])
@@ -2064,6 +2069,10 @@ const convertToArrayFormat = (data) => {
     }))
   }
   return []
+}
+
+const goToAIImport = () => {
+  router.push('/api-testing/ai-import')
 }
 
 const exportRequest = () => {
