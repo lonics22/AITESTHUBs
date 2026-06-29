@@ -71,8 +71,7 @@ jsonpointer==3.0.0
 jsonschema==4.25.0
 jsonschema-specifications==2025.4.1
 kombu==5.5.4
-langgraph>=1.2.6
-langchain-core==1.4.8
+langchain-core==1.2.6
 langchain-openai==1.1.6
 langsmith==0.6.0
 lxml==6.0.0
