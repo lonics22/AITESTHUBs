@@ -17,6 +17,7 @@ from .models import (
     RequestHistory, TestSuite, TestExecution, TestSuiteRequest,
     ScheduledTask, TaskExecutionLog, NotificationLog,
     TaskNotificationSetting, OperationLog, AIServiceConfig,
+    AIImportTask,
 )
 
 User = get_user_model()
@@ -824,3 +825,56 @@ class AIServiceConfigSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         validated_data['created_by'] = self.context['request'].user
         return super().create(validated_data)
+
+
+# ================ AI 导入任务序列化器 ================
+
+
+class AIImportTaskSerializer(serializers.ModelSerializer):
+    """AI 导入任务模型序列化器"""
+    project_name = serializers.SerializerMethodField()
+    collection_name = serializers.SerializerMethodField()
+    created_by_name = serializers.SerializerMethodField()
+
+    def get_project_name(self, obj):
+        return obj.project.name if obj.project else None
+
+    def get_collection_name(self, obj):
+        return obj.collection.name if obj.collection else None
+
+    def get_created_by_name(self, obj):
+        return obj.created_by.username if obj.created_by else None
+
+    class Meta:
+        model = AIImportTask
+        fields = [
+            'id', 'project', 'project_name', 'collection', 'collection_name',
+            'status', 'doc_type', 'parsed_endpoints', 'ai_classification',
+            'ai_questions', 'user_answers', 'auto_structure',
+            'target_collection_id', 'environment_vars', 'generated_summary',
+            'error_message', 'progress', 'created_by', 'created_by_name',
+            'created_at', 'updated_at',
+        ]
+        read_only_fields = [
+            'id', 'status', 'doc_type', 'parsed_endpoints',
+            'ai_classification', 'ai_questions', 'generated_summary',
+            'error_message', 'progress', 'created_by', 'created_at', 'updated_at',
+        ]
+
+
+class AIImportUploadSerializer(serializers.Serializer):
+    """上传文档序列化器"""
+    file = serializers.FileField(required=True)
+
+
+class AIImportConfigureSerializer(serializers.Serializer):
+    """配置导入任务序列化器"""
+    project_id = serializers.IntegerField(required=True)
+    auto_structure = serializers.BooleanField(default=True)
+    target_collection_id = serializers.IntegerField(required=False, allow_null=True)
+
+
+class AIImportAnswersSerializer(serializers.Serializer):
+    """提交用户回答序列化器"""
+    user_answers = serializers.JSONField(required=True)
+    environment_vars = serializers.JSONField(default=dict)
