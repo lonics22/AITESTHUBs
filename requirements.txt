@@ -71,7 +71,8 @@ jsonpointer==3.0.0
 jsonschema==4.25.0
 jsonschema-specifications==2025.4.1
 kombu==5.5.4
-langchain-core==1.2.6
+langgraph>=1.2.6
+langchain-core==1.4.8
 langchain-openai==1.1.6
 langsmith==0.6.0
 lxml==6.0.0
@@ -186,6 +187,9 @@ Pillow==12.1.0
 easyocr==1.7.2
 opencv-contrib-python==4.6.0.66
 numpy==1.26.4
+
+# API文档解析
+prance[openapi]>=0.22
 
 # websocket推送进度
 daphne==4.2.1
