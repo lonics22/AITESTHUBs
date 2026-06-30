@@ -29,9 +29,17 @@
             <el-button type="primary" size="small" @click="openCreateCollectionDialog" :title="$t('apiTesting.interface.createCollection')">
               <el-icon><Folder /></el-icon>
             </el-button>
-            <el-button type="success" size="small" @click="createEmptyRequest" :title="$t('apiTesting.interface.addInterface')">
-              <el-icon><Plus /></el-icon>
-            </el-button>
+            <el-dropdown trigger="click" size="small" @command="handleAddCommand">
+              <el-button type="success" size="small">
+                <el-icon><Plus /></el-icon>
+              </el-button>
+              <template #dropdown>
+                <el-dropdown-menu>
+                  <el-dropdown-item command="createRequest">{{ $t('apiTesting.interface.addInterface') }}</el-dropdown-item>
+                  <el-dropdown-item command="aiImport">🤖 {{ $t('apiTesting.aiImport.title') }}</el-dropdown-item>
+                </el-dropdown-menu>
+              </template>
+            </el-dropdown>
           </div>
         </div>
 
@@ -1315,6 +1323,11 @@ const onNodeExpand = (node) => {
 
 const onNodeCollapse = (node) => {
   expandedKeys.value = expandedKeys.value.filter(key => key !== node.id)
+}
+
+const handleAddCommand = (command) => {
+  if (command === 'createRequest') createEmptyRequest()
+  else if (command === 'aiImport') goToAIImport()
 }
 
 const createEmptyRequest = () => {
