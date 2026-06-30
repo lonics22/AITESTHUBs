@@ -976,8 +976,11 @@ onUnmounted(() => {
 .step-panel .el-select {
   width: 100%;
 }
+</style>
 
-:deep(.el-select-dropdown__item) {
+<style>
+/* Unscoped: targets teleported el-select-dropdown items outside component tree */
+.ai-import-wizard .el-select-dropdown__item {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
