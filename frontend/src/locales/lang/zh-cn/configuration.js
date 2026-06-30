@@ -196,7 +196,8 @@ export default {
     roles: {
       writer: '测试用例编写专家',
       reviewer: '测试评审专家',
-      vision: '视觉模型(LVM)'
+      vision: '视觉模型(LVM)',
+      data_generator: '测试数据生成'
     },
     messages: {
       loadFailed: '加载配置失败',

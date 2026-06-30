@@ -27,7 +27,7 @@
                 <h3>{{ config.name }}</h3>
                 <div class="config-badges">
                   <span class="type-badge" :class="config.prompt_type">
-                    {{ config.prompt_type === 'writer' ? $t('promptConfig.writerPrompt') : (config.prompt_type === 'reviewer' ? $t('promptConfig.reviewerPrompt') : $t('promptConfig.imageAnalyzer')) }}
+                    {{ getPromptTypeLabel(config.prompt_type) }}
                   </span>
                   <span class="status-badge" :class="{ active: config.is_active }">
                     {{ config.is_active ? $t('promptConfig.enabled') : $t('promptConfig.disabled') }}
@@ -108,6 +108,8 @@
                 <option value="writer">{{ $t('promptConfig.writerPrompt') }}</option>
                 <option value="reviewer">{{ $t('promptConfig.reviewerPrompt') }}</option>
                 <option value="vision">{{ $t('promptConfig.imageAnalyzer') }}</option>
+                <option value="data_generator">{{ $t('promptConfig.dataGeneratorPrompt') }}</option>
+                <option value="field_classify">{{ $t('promptConfig.fieldClassifyPrompt') }}</option>
               </select>
             </div>
 
@@ -174,7 +176,7 @@
               <div class="meta-item">
                 <label>{{ $t('promptConfig.type') }}</label>
                 <span class="type-badge" :class="previewConfig.prompt_type">
-                  {{ previewConfig.prompt_type === 'writer' ? $t('promptConfig.writerPrompt') : (previewConfig.prompt_type === 'reviewer' ? $t('promptConfig.reviewerPrompt') : $t('promptConfig.imageAnalyzer')) }}
+                  {{ getPromptTypeLabel(previewConfig.prompt_type) }}
                 </span>
               </div>
               <div class="meta-item">
@@ -220,6 +222,18 @@
                 :class="{ active: activeTab === 'vision' }"
                 @click="activeTab = 'vision'">
                 {{ $t('promptConfig.visionTab') }}
+              </button>
+              <button
+                class="tab-btn"
+                :class="{ active: activeTab === 'data_generator' }"
+                @click="activeTab = 'data_generator'">
+                {{ $t('promptConfig.dataGeneratorTab') }}
+              </button>
+              <button
+                class="tab-btn"
+                :class="{ active: activeTab === 'field_classify' }"
+                @click="activeTab = 'field_classify'">
+                {{ $t('promptConfig.fieldClassifyTab') }}
               </button>
             </div>
 
@@ -285,7 +299,14 @@ export default {
 
   methods: {
     getPromptTypeLabel(promptType) {
-      return promptType === 'writer' ? this.$t('promptConfig.writerPrompt') : (promptType === 'reviewer' ? this.$t('promptConfig.reviewerPrompt') : this.$t('promptConfig.imageAnalyzer'))
+      const labels = {
+        writer: this.$t('promptConfig.writerPrompt'),
+        reviewer: this.$t('promptConfig.reviewerPrompt'),
+        vision: this.$t('promptConfig.imageAnalyzer'),
+        data_generator: this.$t('promptConfig.dataGeneratorPrompt'),
+        field_classify: this.$t('promptConfig.fieldClassifyPrompt'),
+      }
+      return labels[promptType] || promptType
     },
 
     getExistingPromptConfig(promptType, excludeId = null) {
@@ -293,7 +314,7 @@ export default {
     },
 
     getMissingPromptTypes() {
-      return ['writer', 'reviewer', 'vision'].filter(type => !this.getExistingPromptConfig(type))
+      return ['writer', 'reviewer', 'vision', 'data_generator', 'field_classify'].filter(type => !this.getExistingPromptConfig(type))
     },
 
     formatApiError(error, fallbackText) {
@@ -377,6 +398,7 @@ export default {
         const response = await api.get('/requirement-analysis/prompts/load_defaults/')
         console.log('Default prompts response:', response.data)
         this.defaultPrompts = response.data.defaults
+        this.activeTab = missingTypes[0]
         this.showDefaultsModal = true
         console.log('showDefaultsModal set to:', this.showDefaultsModal)
       } catch (error) {
@@ -423,6 +445,26 @@ export default {
             name: this.$t('promptConfig.defaultVisionName'),
             prompt_type: 'vision',
             content: this.defaultPrompts.vision,
+            is_active: true
+          })
+        }
+
+        // 创建测试数据生成提示词配置
+        if (missingTypes.includes('data_generator') && this.defaultPrompts.data_generator) {
+          await api.post('/requirement-analysis/prompts/', {
+            name: this.$t('promptConfig.defaultDataGeneratorName'),
+            prompt_type: 'data_generator',
+            content: this.defaultPrompts.data_generator,
+            is_active: true
+          })
+        }
+
+        // 创建字段分类提示词配置
+        if (missingTypes.includes('field_classify') && this.defaultPrompts.field_classify) {
+          await api.post('/requirement-analysis/prompts/', {
+            name: this.$t('promptConfig.defaultFieldClassifyName'),
+            prompt_type: 'field_classify',
+            content: this.defaultPrompts.field_classify,
             is_active: true
           })
         }
@@ -531,7 +573,8 @@ export default {
     closeDefaultsModal() {
       this.showDefaultsModal = false
       this.defaultPrompts = { writer: '', reviewer: '', vision: '' }
-      this.activeTab = 'writer'
+      const missingTypes = this.getMissingPromptTypes()
+      this.activeTab = missingTypes[0] || 'writer'
     },
 
     truncateContent(content, maxLength) {

@@ -1340,10 +1340,12 @@ export default {
       if (!content) return '';
 
       // 先去除"新增"标记，在markdown转换之前处理
-      // 这样可以避免markdown转换后无法匹配的问题
       let html = content
-          .replace(/\*\*新增\*\*-/g, '')  // **新增**-xxx -> xxx (保留xxx的原有格式)
-          .replace(/新增-/g, '');  // 新增-xxx -> xxx (保留xxx的原有格式)
+          .replace(/\*\*新增\*\*-/g, '')
+          .replace(/新增-/g, '');
+
+      // 先渲染图片 ![alt](url) -> <img>（在HTML转义之前，避免&被破坏 BUG-102）
+      html = html.replace(/!\[(.*?)\]\((.*?)\)/g, '<div class="image-container"><img src="$2" alt="$1" class="preview-image" onclick="window.open(\'$2\',\'_blank\')"></div>');
 
       // 转义HTML特殊字符
       html = html
@@ -1351,8 +1353,7 @@ export default {
           .replace(/</g, '&lt;')
           .replace(/>/g, '&gt;');
 
-      // 渲染图片 ![alt](url) -> <img>
-      html = html.replace(/!\[(.*?)\]\((.*?)\)/g, '<div class="image-container"><img src="$2" alt="$1" class="preview-image" onclick="window.open(\'$2\',\'_blank\')"></div>');
+      // 转换Markdown语法
 
       // 转换Markdown语法
       // 标题 #

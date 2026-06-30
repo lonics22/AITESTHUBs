@@ -11,18 +11,22 @@ from rest_framework.viewsets import GenericViewSet
 from django.contrib.auth.models import User
 from django.db.models import Q, Count
 from django.utils import timezone
-from django.http import HttpResponse
+from django.http import HttpResponse, StreamingHttpResponse
 from django.core.cache import cache
 from django.views.decorators.csrf import csrf_exempt
 from asgiref.sync import sync_to_async
 import asyncio
+import json
 
 import logging
 from pathlib import Path
 
 from .models import DataFactoryRecord
 from .serializers import DataFactoryRecordSerializer, ToolExecuteSerializer
+from .serializers import AIFieldDefSerializer, AIClassifyRequestSerializer, AIGenerateRequestSerializer
 from .tool_list import get_categories, get_tool_list
+from .ai_context import retrieve_project_context
+from .ai_types import validate_and_fix_record
 from .tools.string_tools import StringTools
 from .tools.encoding_tools import EncodingTools
 from .tools.random_tools import RandomTools
@@ -520,6 +524,185 @@ class DataFactoryViewSet(viewsets.ModelViewSet):
             else:
                 input_data = {'expression': input_data}
         return tool_mapping[tool_name](**input_data)
+
+    # ── AI 数据生成端点 ────────────────────────────────────────
+
+    @action(detail=False, methods=['post'], url_path='ai_classify')
+    def ai_classify(self, request):
+        """分类接口字段：auto / manual / context_ref"""
+        serializer = AIClassifyRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        from apps.requirement_analysis.models import AIModelConfig, AIModelService
+
+        model_config = AIModelConfig.objects.filter(role='data_generator', is_active=True).first()
+        if not model_config:
+            return Response({'error': '未配置测试数据生成的AI模型'}, status=400)
+
+        import os
+        from django.conf import settings
+        prompt_path = os.path.join(settings.BASE_DIR, 'docs/tester_field_classify.md')
+        try:
+            with open(prompt_path, 'r', encoding='utf-8') as f:
+                classify_prompt = f.read()
+        except FileNotFoundError:
+            return Response({'error': '字段分类提示词文件未找到'}, status=500)
+
+        api_info_str = json.dumps(serializer.validated_data['api_info'], ensure_ascii=False, indent=2)
+        prompt = classify_prompt.replace('{{api_info}}', api_info_str)
+
+        messages = [
+            {"role": "system", "content": "你是一个接口测试专家，严格按格式输出 JSON。"},
+            {"role": "user", "content": prompt},
+        ]
+
+        try:
+            response = asyncio.run(AIModelService.call_openai_compatible_api(model_config, messages))
+            content = response['choices'][0]['message']['content']
+            import re
+            json_match = re.search(r'```json\n(.*?)\n```', content, re.DOTALL)
+            if json_match:
+                result = json.loads(json_match.group(1))
+            else:
+                result = json.loads(content)
+            return Response(result)
+        except Exception as e:
+            return Response({'error': f'字段分类失败: {e}'}, status=500)
+
+    @action(detail=False, methods=['get'], url_path='ai_context')
+    def ai_context(self, request):
+        """获取项目上下文（可复用的测试数据）"""
+        project_id = request.query_params.get('project_id')
+        if not project_id:
+            return Response({'error': '缺少 project_id'}, status=400)
+        context = retrieve_project_context(int(project_id))
+        return Response(context)
+
+    @action(detail=False, methods=['post'], url_path='ai_generate')
+    def ai_generate(self, request):
+        """AI 生成测试数据（SSE 流式）"""
+        serializer = AIGenerateRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        data = serializer.validated_data
+        from apps.requirement_analysis.models import AIModelConfig, PromptConfig, AIModelService
+
+        model_config = AIModelConfig.objects.filter(role='data_generator', is_active=True).first()
+        prompt_config = PromptConfig.objects.filter(prompt_type='data_generator', is_active=True).first()
+
+        if not model_config or not prompt_config:
+            return Response({'error': '未配置 data_generator 模型或提示词'}, status=400)
+
+        import os
+        from django.conf import settings
+
+        def event_stream():
+            # 1. 分类（如果未传入）
+            classification = data.get('classification')
+            if not classification:
+                classify_prompt_path = os.path.join(settings.BASE_DIR, 'docs/tester_field_classify.md')
+                with open(classify_prompt_path, 'r', encoding='utf-8') as f:
+                    classify_prompt = f.read()
+                api_info_str = json.dumps(data['api_info'], ensure_ascii=False, indent=2)
+                prompt = classify_prompt.replace('{{api_info}}', api_info_str)
+
+                messages = [
+                    {"role": "system", "content": "你是一个接口测试专家，严格按格式输出 JSON。"},
+                    {"role": "user", "content": prompt},
+                ]
+                try:
+                    response = asyncio.run(AIModelService.call_openai_compatible_api(model_config, messages))
+                    content = response['choices'][0]['message']['content']
+                    import re
+                    json_match = re.search(r'```json\n(.*?)\n```', content, re.DOTALL)
+                    classification = json.loads(json_match.group(1)) if json_match else json.loads(content)
+                except Exception as e:
+                    yield f"data: {json.dumps({'status': 'error', 'message': str(e)})}\n\n"
+                    return
+
+            yield f"data: {json.dumps({'status': 'classification_done', 'classification': classification}, ensure_ascii=False)}\n\n"
+
+            # 2. 检查 manual 字段
+            manual_fields = classification.get('manual_fields', [])
+            if manual_fields and not data.get('user_inputs'):
+                yield f"data: {json.dumps({'status': 'need_user_input', 'fields': manual_fields}, ensure_ascii=False)}\n\n"
+                return
+
+            # 3. 检索上下文
+            context = retrieve_project_context(data['project_id'])
+            yield f"data: {json.dumps({'status': 'context_retrieved', 'context': context}, ensure_ascii=False)}\n\n"
+
+            # 4. 构建生成 prompt
+            fields_str = "\n".join([
+                f"{i+1}. 字段名：{f['name']}\n   - 类型：{f.get('type', 'string')}\n   - 描述：{f.get('description', '')}"
+                for i, f in enumerate(data['field_defs'])
+            ])
+
+            context_parts = []
+            if data.get('user_inputs'):
+                context_parts.append(f"用户指定值：\n{json.dumps(data['user_inputs'], ensure_ascii=False, indent=2)}")
+            if context.get('existing_usernames'):
+                context_parts.append(f"已有用户名：{', '.join(context['existing_usernames'])}")
+            if context.get('available_ids'):
+                context_parts.append(f"可用ID：{', '.join(context['available_ids'])}")
+
+            context_str = "\n\n".join(context_parts) if context_parts else "无额外上下文"
+
+            prompt_content = prompt_config.content
+            prompt_content = prompt_content.replace('{{fields}}', fields_str)
+            prompt_content = prompt_content.replace('{{count}}', str(int(data.get('count', 5))))
+            prompt_content = prompt_content.replace('{{data_format}}', data.get('output_format', 'json'))
+            prompt_content = prompt_content.replace('{{language}}', data.get('language', '中文'))
+            prompt_content = prompt_content.replace('{{context}}', context_str)
+            prompt_content = prompt_content.replace('{{result_format}}', f"\n```{data.get('output_format', 'json')}\n\n```\n")
+
+            messages = [
+                {"role": "system", "content": "你是一个测试数据生成专家，严格按格式输出。"},
+                {"role": "user", "content": prompt_content},
+            ]
+
+            # 5. 流式调用 LLM
+            full_content = ""
+
+            async def stream_callback(chunk):
+                nonlocal full_content
+                full_content += chunk
+
+            try:
+                generator = AIModelService.call_openai_compatible_api_stream(
+                    model_config, messages, callback=stream_callback
+                )
+                asyncio.run(_consume_generator(generator))
+
+                # 6. 解析 + 后验修正
+                import re
+                json_match = re.search(r'```json\n(.*?)\n```', full_content, re.DOTALL)
+                if json_match:
+                    raw_data = json.loads(json_match.group(1))
+                else:
+                    raw_data = json.loads(full_content)
+
+                if isinstance(raw_data, dict):
+                    raw_data = [raw_data]
+
+                validated = []
+                for record in raw_data:
+                    fixed = validate_and_fix_record(record, data['field_defs'])
+                    validated.append(fixed)
+                    yield f"data: {json.dumps({'status': 'record', 'index': len(validated) - 1, 'record': fixed}, ensure_ascii=False)}\n\n"
+
+                yield f"data: {json.dumps({'status': 'completed', 'total': len(validated), 'data': validated}, ensure_ascii=False)}\n\n"
+
+            except Exception as e:
+                yield f"data: {json.dumps({'status': 'error', 'message': str(e)})}\n\n"
+
+        response = StreamingHttpResponse(
+            event_stream(),
+            content_type='text/event-stream; charset=utf-8'
+        )
+        response['Cache-Control'] = 'no-cache'
+        response['X-Accel-Buffering'] = 'no'
+        return response
 
     @action(detail=False, methods=['get'])
     def categories(self, request):
@@ -1149,3 +1332,9 @@ class DataFactoryViewSet(viewsets.ModelViewSet):
         cache.set(cache_key, variable_functions, 1800)
 
         return Response(variable_functions)
+
+
+async def _consume_generator(generator):
+    """消费异步生成器"""
+    async for _ in generator:
+        pass

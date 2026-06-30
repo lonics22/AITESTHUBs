@@ -2,7 +2,7 @@ from django.contrib import admin
 from .models import (
     RequirementDocument, RequirementAnalysis, BusinessRequirement,
     GeneratedTestCase, AnalysisTask, AIModelConfig, PromptConfig,
-    GenerationConfig, TestCaseGenerationTask
+    GenerationConfig, TestCaseGenerationTask, RequirementImage
 )
 
 
@@ -97,3 +97,10 @@ class TestCaseGenerationTaskAdmin(admin.ModelAdmin):
     list_filter = ['status', 'output_mode', 'created_at']
     search_fields = ['task_id', 'title', 'requirement_text']
     readonly_fields = ['task_id', 'created_at', 'updated_at']
+
+
+@admin.register(RequirementImage)
+class RequirementImageAdmin(admin.ModelAdmin):
+    list_display = ['filename', 'uploaded_by', 'created_at']
+    list_filter = ['created_at']
+    search_fields = ['filename', 'uploaded_by__username']

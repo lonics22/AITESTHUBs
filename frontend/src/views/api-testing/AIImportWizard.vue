@@ -299,7 +299,7 @@
           <template #header>
             <span>{{ $t('apiTesting.aiImport.generatedRequests') }}</span>
           </template>
-          <el-table :data="savedRequests" max-height="400" stripe empty-text="暂无数据">
+          <el-table :data="savedRequests" max-height="400" stripe :empty-text="$t('apiTesting.common.noData')">
             <el-table-column :label="$t('apiTesting.aiImport.method')" width="90">
               <template #default="{ row }">
                 <el-tag :type="methodTagType(row.method || row.method_display)" size="small">
@@ -498,7 +498,7 @@ const loadQuestions = async () => {
           user_value: p.default_value || p.user_value || ''
         }))
       } else if (q.field_type === 'env_var_mapping') {
-        q.variables = (q.options || []).map((v) => ({
+        q.variables = (q.variables || q.env_vars || []).map((v) => ({
           original_value: v.original_value || v.originalValue || '',
           var_name: v.var_name || v.varName || ''
         }))

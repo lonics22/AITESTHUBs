@@ -3,6 +3,9 @@ export default {
   title: '数据工厂',
   subtitle: '智能数据生成工具箱 - 为测试提供高质量测试数据',
 
+  // 模式切换
+  toolMode: '工具模式',
+
   // 视图切换
   viewMode: {
     category: '按工具分类',
@@ -534,5 +537,36 @@ export default {
     parse_expression: '解析Crontab表达式含义',
     get_next_runs: '获取Crontab下次执行时间',
     validate_expression: '验证Crontab表达式是否有效'
+  },
+
+  // AI 生成相关
+  ai: {
+    aiTab: 'AI 生成',
+    aiTabTooltip: '使用 AI 智能生成测试数据，支持字段分类和自动修正',
+    fieldConfig: '字段配置',
+    addField: '添加字段',
+    fieldName: '字段名',
+    fieldType: '类型',
+    fieldDescription: '描述',
+    generateCount: '生成数量',
+    outputFormat: '输出格式',
+    aiGenerate: '开始生成',
+    generating: '生成中...',
+    classificationResult: '字段分类结果',
+    autoField: '自动生成',
+    manualField: '需手动填写',
+    contextField: '从项目复用',
+    fillManualFields: '请填写以下字段',
+    projectContext: '项目上下文',
+    retrievedContext: '已检索到以下可复用数据',
+    generatedResult: '生成结果',
+    copyAll: '复制全部',
+    downloadJSON: '下载 JSON',
+    validationPassed: '✓ 格式验证通过',
+    validationFixed: '↻ 已自动修正',
+    noContext: '无相关上下文',
+    configStep: '字段配置',
+    aiStep: 'AI 处理',
+    resultStep: '生成结果'
   }
 }

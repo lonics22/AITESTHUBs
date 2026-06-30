@@ -217,6 +217,7 @@ class AIModelConfig(models.Model):
         ('reviewer', '测试评审专家'),
         ('browser_use_text', 'Browser Use - 文本模式'),
         ('vision', '视觉模型（LVM）'),
+        ('data_generator', '测试数据生成'),
     ]
 
     name = models.CharField(max_length=100, verbose_name='配置名称')
@@ -259,6 +260,8 @@ class PromptConfig(models.Model):
         ('writer', '用例编写提示词'),
         ('reviewer', '用例评审提示词'),
         ('vision', '图片分析提示词'),
+        ('data_generator', '测试数据生成提示词'),
+        ('field_classify', '字段分类提示词'),
     ]
 
     name = models.CharField(max_length=100, verbose_name='配置名称')
@@ -1330,7 +1333,7 @@ class AIModelService:
         replacements = {}
         cache = {}  # URL -> description 缓存
 
-        def process_single_image(match):
+        async def process_single_image(match):
             """处理单张图片：下载 -> base64 -> LVM调用 -> 获取描述"""
             alt_text = match.group(1)
             url = match.group(2)
@@ -1360,9 +1363,10 @@ class AIModelService:
                             return None
                 else:
                     # 远程 URL
-                    response = httpx.get(url, timeout=30)
-                    response.raise_for_status()
-                    image_data = response.content
+                    async with httpx.AsyncClient(timeout=30) as client:
+                        response = await client.get(url)
+                        response.raise_for_status()
+                        image_data = response.content
 
                 # 转为 base64
                 if not image_data or len(image_data) == 0:
@@ -1389,9 +1393,8 @@ class AIModelService:
                     {"type": "text", "text": vision_prompt}
                 ]}]
 
-                # 调用 LVM（使用 asyncio.run 桥接 async 函数到 sync 上下文）
-                coro = AIModelService.call_openai_compatible_api(lvm_config, messages)
-                response = asyncio.run(coro)
+                # 直接 await（BUG-106：移除 asyncio.run 桥接）
+                response = await AIModelService.call_openai_compatible_api(lvm_config, messages)
                 description = response['choices'][0]['message']['content'].strip()
 
                 cache[url] = description
@@ -1402,21 +1405,16 @@ class AIModelService:
                 logger.error(f"LVM 分析图片失败 [{url[:50]}]: {e}")
                 return None
 
-        # 并发处理所有图片
-        loop = asyncio.get_event_loop()
-        with ThreadPoolExecutor(max_workers=3) as executor:
-            futures = []
-            for match in matches:
-                futures.append(loop.run_in_executor(executor, process_single_image, match))
+        # 并发处理所有图片（直接 gather 协程，无需 ThreadPoolExecutor 桥接）
+        tasks = [process_single_image(m) for m in matches]
+        results = await asyncio.gather(*tasks, return_exceptions=True)
 
-            results = await asyncio.gather(*futures, return_exceptions=True)
-
-            for i, result in enumerate(results):
-                if isinstance(result, Exception):
-                    logger.error(f"图片处理异常: {result}")
-                    continue
-                if result:
-                    replacements[matches[i].group(0)] = f"> {result}"
+        for i, result in enumerate(results):
+            if isinstance(result, Exception):
+                logger.error(f"图片处理异常: {result}")
+                continue
+            if result:
+                replacements[matches[i].group(0)] = f"> {result}"
 
         # 执行替换
         processed_text = requirement_text

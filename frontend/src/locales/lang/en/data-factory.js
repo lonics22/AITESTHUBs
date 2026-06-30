@@ -3,6 +3,9 @@ export default {
   title: 'Data Factory',
   subtitle: 'Smart Data Generation Toolkit - Providing High-Quality Test Data',
 
+  // Mode switch
+  toolMode: 'Tools',
+
   // View mode
   viewMode: {
     category: 'By Category',
@@ -534,5 +537,36 @@ export default {
     parse_expression: 'Parse Crontab expression meaning',
     get_next_runs: 'Get next Crontab execution times',
     validate_expression: 'Validate Crontab expression'
+  },
+
+  // AI generation related
+  ai: {
+    aiTab: 'AI Generate',
+    aiTabTooltip: 'Use AI to intelligently generate test data with field classification and auto-fix',
+    fieldConfig: 'Field Configuration',
+    addField: 'Add Field',
+    fieldName: 'Field Name',
+    fieldType: 'Type',
+    fieldDescription: 'Description',
+    generateCount: 'Generate Count',
+    outputFormat: 'Output Format',
+    aiGenerate: 'Generate',
+    generating: 'Generating...',
+    classificationResult: 'Field Classification',
+    autoField: 'Auto',
+    manualField: 'Manual Input',
+    contextField: 'From Project',
+    fillManualFields: 'Please fill in the following fields',
+    projectContext: 'Project Context',
+    retrievedContext: 'Retrieved reusable data',
+    generatedResult: 'Generated Results',
+    copyAll: 'Copy All',
+    downloadJSON: 'Download JSON',
+    validationPassed: '✓ Validation Passed',
+    validationFixed: '↻ Auto Fixed',
+    noContext: 'No related context',
+    configStep: 'Field Config',
+    aiStep: 'AI Processing',
+    resultStep: 'Results'
   }
 }

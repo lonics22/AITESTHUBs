@@ -150,6 +150,7 @@
                 <option value="writer">{{ $t('configuration.aiModel.roles.writer') }}</option>
                 <option value="reviewer">{{ $t('configuration.aiModel.roles.reviewer') }}</option>
                 <option value="vision">{{ $t('configuration.aiModel.roles.vision') }}</option>
+                <option value="data_generator">{{ $t('configuration.aiModel.roles.data_generator') }}</option>
               </select>
             </div>
 

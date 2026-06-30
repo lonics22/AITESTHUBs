@@ -6,7 +6,7 @@ from django.contrib.auth import get_user_model
 from django.shortcuts import get_object_or_404
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import filters
-from django.db import models
+from django.db import models, transaction
 from django.utils import timezone
 from django.http import HttpResponse, FileResponse, Http404, HttpResponseNotFound, StreamingHttpResponse
 from django.views.static import serve
@@ -54,6 +54,12 @@ from .serializers import (
     AIImportConfigureSerializer, AIImportAnswersSerializer,
 )
 from .doc_parser import detect_format, parse_document
+
+try:
+    import yaml as _yaml
+    HAS_YAML = True
+except ImportError:
+    HAS_YAML = False
 from .ai_import_service import analyze_endpoints, generate_questions, generate_requests
 
 User = get_user_model()
@@ -2816,18 +2822,79 @@ class AIImportViewSet(viewsets.GenericViewSet):
     # ----- 1. 上传文档 -----
     @action(detail=False, methods=['post'])
     def upload(self, request):
-        """上传 API 文档（JSON），解析并启动 AI 分析"""
+        """上传 API 文档（JSON/YAML），解析并启动 AI 分析"""
         upload_serializer = AIImportUploadSerializer(data=request.data)
         upload_serializer.is_valid(raise_exception=True)
 
         file = request.FILES['file']
-        try:
-            content = json.loads(file.read().decode('utf-8'))
-        except (json.JSONDecodeError, UnicodeDecodeError) as e:
+
+        # BUG-009: 文件大小限制 50MB
+        MAX_FILE_SIZE = 50 * 1024 * 1024
+        if file.size > MAX_FILE_SIZE:
             return Response(
-                {'error': f'文件不是有效的 JSON: {str(e)}'},
+                {'error': f'文件大小不能超过 50MB（当前 {file.size / 1024 / 1024:.1f}MB）'},
+                status=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE
+            )
+
+        try:
+            raw = file.read().decode('utf-8')
+        except UnicodeDecodeError:
+            return Response(
+                {'error': '文件编码不是 UTF-8，请使用 UTF-8 编码的 JSON/YAML 文件'},
                 status=status.HTTP_400_BAD_REQUEST
             )
+
+        # 根据文件后缀决定解析策略
+        _, ext = os.path.splitext(file.name.lower())
+        if ext == '.json':
+            try:
+                content = json.loads(raw)
+            except json.JSONDecodeError as e:
+                return Response(
+                    {'error': f'文件不是有效的 JSON: {e}'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+        elif ext in ('.yaml', '.yml'):
+            if not HAS_YAML:
+                return Response(
+                    {'error': 'PyYAML 未安装，无法解析 YAML 格式'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            try:
+                content = _yaml.safe_load(raw)
+            except Exception as e:
+                return Response(
+                    {'error': f'文件不是有效的 YAML: {e}'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            if not isinstance(content, dict):
+                return Response(
+                    {'error': 'YAML 文件内容为空或不是有效的 API 文档'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+        else:
+            # 无后缀或未知后缀：先试 JSON，再试 YAML
+            try:
+                content = json.loads(raw)
+            except json.JSONDecodeError:
+                if HAS_YAML:
+                    try:
+                        content = _yaml.safe_load(raw)
+                    except Exception as yaml_err:
+                        return Response(
+                            {'error': f'文件不是有效的 JSON 或 YAML: {yaml_err}'},
+                            status=status.HTTP_400_BAD_REQUEST
+                        )
+                    if not isinstance(content, dict):
+                        return Response(
+                            {'error': '文件内容为空或不是有效的 API 文档'},
+                            status=status.HTTP_400_BAD_REQUEST
+                        )
+                else:
+                    return Response(
+                        {'error': '文件不是有效的 JSON，且 PyYAML 未安装，无法解析 YAML 格式'},
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
 
         # 检测文档格式
         try:
@@ -2933,6 +3000,7 @@ class AIImportViewSet(viewsets.GenericViewSet):
 
     # ----- 4. 提交用户回答，触发 AI 生成 -----
     @action(detail=True, methods=['post'])
+    @transaction.atomic
     def answers(self, request, pk=None):
         """提交用户回答并触发 AI 生成请求数据"""
         task = AIImportTask.objects.select_for_update().get(
@@ -2980,6 +3048,7 @@ class AIImportViewSet(viewsets.GenericViewSet):
 
     # ----- 6. 保存到数据库 -----
     @action(detail=True, methods=['post'])
+    @transaction.atomic
     def save(self, request, pk=None):
         """将生成的 API 请求保存到数据库（创建 ApiCollection + ApiRequest）"""
         task = AIImportTask.objects.select_for_update().get(

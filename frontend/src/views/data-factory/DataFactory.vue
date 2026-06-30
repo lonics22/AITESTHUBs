@@ -7,7 +7,13 @@
           {{ $t('dataFactory.title') }}
         </h1>
         <p class="page-subtitle">{{ $t('dataFactory.subtitle') }}</p>
-        <div class="header-actions">
+      </div>
+    </el-card>
+
+    <el-tabs v-model="activeMode" type="border-card" class="mode-tabs">
+      <el-tab-pane :label="$t('dataFactory.toolMode')" name="tool">
+        <!-- 工具栏 - 仅在工具模式下显示 -->
+        <div v-show="activeMode === 'tool'" class="header-actions">
           <el-button-group>
             <el-button
               :type="viewMode === 'category' ? 'primary' : ''"
@@ -29,8 +35,6 @@
             {{ $t('dataFactory.actions.history') }}
           </el-button>
         </div>
-      </div>
-    </el-card>
 
     <!-- 工具分类视图 -->
     <div v-if="viewMode === 'category'" class="category-view">
@@ -97,6 +101,12 @@
         </el-col>
       </el-row>
     </div>
+
+      </el-tab-pane>
+      <el-tab-pane :label="$t('dataFactory.ai.aiTab')" name="ai">
+        <AIDataGenerator />
+      </el-tab-pane>
+    </el-tabs>
 
     <!-- 工具执行对话框 -->
     <el-dialog
@@ -996,6 +1006,7 @@
 import { ref, watch, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
+import AIDataGenerator from './AIDataGenerator.vue'
 import { ElMessage, ElMessageBox, ElEmpty } from 'element-plus'
 import {
   DataLine, Menu, Grid, Clock, Operation, ArrowRight,
@@ -1039,6 +1050,7 @@ const cache = {
 const router = useRouter()
 const { t } = useI18n()
 
+const activeMode = ref('tool')
 const viewMode = ref('category')
 const categories = ref([])
 const scenarios = ref([])

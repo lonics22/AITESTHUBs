@@ -651,9 +651,15 @@ def _build_auth(
     user_answers: Dict[str, Any],
 ) -> Dict[str, Any]:
     """Extract auth configuration from headers and user answers."""
-    # Check if user specified auth type
+    # Check if user specified auth type — limit to question-ID keys (q_*) to avoid
+    # false matching on business parameter values (BUG-012)
     auth_answer = None
     for key, val in user_answers.items():
+        # Only consider keys that look like question IDs (q_1, q_2, ...)
+        # or known auth-related key names
+        is_auth_key = bool(re.match(r'^q_\d+$', str(key))) or key in ('auth', 'auth_type', 'q_auth')
+        if not is_auth_key:
+            continue
         if isinstance(val, str) and val in ("bearer", "basic", "apikey", "none"):
             auth_answer = val
             break

@@ -1360,6 +1360,22 @@ class PromptConfigViewSet(viewsets.ModelViewSet):
 输出要求：只需要输出类型和对它内容的描述，不要输出其他无关内容和评价。
 输出的开头为："原型图界面描述：" 或 "流程图描述："'''
 
+            # 读取测试数据生成提示词
+            data_gen_prompt_path = os.path.join(settings.BASE_DIR, 'docs/tester_data_gen.md')
+            try:
+                with open(data_gen_prompt_path, 'r', encoding='utf-8') as f:
+                    defaults['data_generator'] = f.read()
+            except FileNotFoundError:
+                defaults['data_generator'] = '# 任务目标\n你是一个测试数据生成专家...'
+
+            # 读取字段分类提示词
+            classify_prompt_path = os.path.join(settings.BASE_DIR, 'docs/tester_field_classify.md')
+            try:
+                with open(classify_prompt_path, 'r', encoding='utf-8') as f:
+                    defaults['field_classify'] = f.read()
+            except FileNotFoundError:
+                defaults['field_classify'] = '# 任务目标\n分析 API 接口测试的入参字段...'
+
             return Response({
                 'message': '默认提示词加载成功',
                 'defaults': defaults

@@ -5,6 +5,7 @@ export function uploadImportDocument(formData) {
     url: '/api-testing/ai-import/upload/',
     method: 'post',
     data: formData,
+    timeout: 120000,
     headers: { 'Content-Type': 'multipart/form-data' }
   })
 }
