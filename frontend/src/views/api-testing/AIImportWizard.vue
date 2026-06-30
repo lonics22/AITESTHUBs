@@ -26,6 +26,7 @@
             :show-file-list="true"
             accept=".json,.yaml,.yml"
             :limit="1"
+            :disabled="uploading"
             :on-change="handleFileChange"
             :file-list="fileList"
           >
@@ -41,9 +42,14 @@
               </div>
             </template>
           </el-upload>
+
+          <div v-if="uploading" class="upload-loading-overlay">
+            <el-progress type="circle" :percentage="50" :width="80" :stroke-width="5" indeterminate />
+            <p class="upload-loading-text">{{ $t('apiTesting.aiImport.analyzing') }}</p>
+          </div>
         </el-card>
 
-        <div v-if="uploadResult" class="upload-result">
+        <div v-if="uploadResult && !uploading" class="upload-result">
           <el-alert
             :title="uploadResult.message"
             type="success"
@@ -148,7 +154,7 @@
           >
             <template #header>
               <div class="question-header">
-                <span class="question-title">{{ question.question || question.param_name }}</span>
+                <span class="question-title">{{ question.title }}</span>
                 <el-tag size="small" type="info">{{ question.field_type }}</el-tag>
               </div>
               <div v-if="question.description" class="question-desc">
@@ -159,7 +165,7 @@
             <!-- string type -->
             <el-input
               v-if="question.field_type === 'string'"
-              v-model="answers[question.param_name]"
+              v-model="answers[question.id]"
               :placeholder="$t('apiTesting.aiImport.inputPlaceholder')"
               clearable
             />
@@ -167,7 +173,7 @@
             <!-- select type -->
             <el-select
               v-else-if="question.field_type === 'select'"
-              v-model="answers[question.param_name]"
+              v-model="answers[question.id]"
               :placeholder="$t('apiTesting.common.pleaseSelect')"
               style="width: 100%"
               filterable
@@ -176,9 +182,9 @@
             >
               <el-option
                 v-for="opt in question.options"
-                :key="opt"
-                :label="opt"
-                :value="opt"
+                :key="opt.value || opt"
+                :label="opt.label || opt"
+                :value="opt.value || opt"
               />
             </el-select>
 
@@ -196,7 +202,7 @@
                 <el-table-column :label="$t('apiTesting.aiImport.endpoint')" prop="endpoint" min-width="200">
                   <template #default="{ row }">
                     <span class="endpoint-method">{{ row.method }}</span>
-                    <span class="endpoint-path">{{ row.path }}</span>
+                    <span class="endpoint-path">{{ row.endpoint || row.path }}</span>
                   </template>
                 </el-table-column>
                 <el-table-column :label="$t('apiTesting.aiImport.description')" prop="description" min-width="160" />
@@ -281,23 +287,40 @@
       </div>
 
       <!-- Step 5: Results -->
-      <div v-show="currentStep === 5" class="step-panel">
-        <el-card>
-          <div class="result-container">
-            <el-icon class="result-icon" :size="64" color="#67c23a">
-              <SuccessFilled />
-            </el-icon>
-            <h3>{{ $t('apiTesting.aiImport.saveSuccess', { count: savedCount }) }}</h3>
-            <div class="result-actions">
-              <el-button type="primary" size="large" @click="viewResults">
-                {{ $t('apiTesting.aiImport.viewResult') }}
-              </el-button>
-              <el-button size="large" @click="resetWizard">
-                {{ $t('apiTesting.aiImport.importMore') }}
-              </el-button>
-            </div>
-          </div>
+      <div v-show="currentStep === 5" class="result-panel">
+        <div class="result-header">
+          <el-icon :size="48" color="#67c23a">
+            <SuccessFilled />
+          </el-icon>
+          <h2>{{ $t('apiTesting.aiImport.saveSuccess', { count: savedCount }) }}</h2>
+        </div>
+
+        <el-card class="result-list-card">
+          <template #header>
+            <span>{{ $t('apiTesting.aiImport.generatedRequests') }}</span>
+          </template>
+          <el-table :data="savedRequests" max-height="400" stripe empty-text="暂无数据">
+            <el-table-column :label="$t('apiTesting.aiImport.method')" width="90">
+              <template #default="{ row }">
+                <el-tag :type="methodTagType(row.method || row.method_display)" size="small">
+                  {{ row.method || row.method_display }}
+                </el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column :label="$t('apiTesting.aiImport.name')" prop="name" min-width="200" />
+            <el-table-column :label="$t('apiTesting.aiImport.path')" prop="path" min-width="250" show-overflow-tooltip />
+            <el-table-column :label="$t('apiTesting.aiImport.collection')" min-width="150">
+              <template #default="{ row }">
+                {{ row.collection_name || row.collection || '-' }}
+              </template>
+            </el-table-column>
+          </el-table>
         </el-card>
+
+        <div class="result-actions">
+          <el-button type="primary" size="large" @click="viewResults">{{ $t('apiTesting.aiImport.viewResult') }}</el-button>
+          <el-button size="large" @click="resetWizard">{{ $t('apiTesting.aiImport.importMore') }}</el-button>
+        </div>
       </div>
     </div>
 
@@ -335,7 +358,6 @@ import {
   getImportQuestions,
   submitImportAnswers,
   saveImportRequests,
-  previewImport,
   subscribeImportProgress
 } from '@/api/api-testing-import'
 import { getApiProjects, getApiCollections } from '@/api/api-testing'
@@ -350,6 +372,7 @@ const taskId = ref(null)
 const uploadRef = ref(null)
 const fileList = ref([])
 const uploadResult = ref(null)
+const uploading = ref(false)
 
 // File format tag colors
 const formatTagMap = {
@@ -364,9 +387,13 @@ const formatTagType = computed(() => {
   return formatTagMap[fmt] || 'info'
 })
 
+const methodTagMap = { GET: '', POST: 'success', PUT: 'warning', PATCH: 'warning', DELETE: 'danger' }
+const methodTagType = (method) => methodTagMap[method] || ''
+
 // Step 0: Upload handling
 const handleFileChange = async (file) => {
   fileList.value = [file]
+  uploading.value = true
   stepLoading.value = true
   try {
     const formData = new FormData()
@@ -375,14 +402,15 @@ const handleFileChange = async (file) => {
     taskId.value = res.data.task_id || res.data.id
     uploadResult.value = {
       message: res.data.message || t('apiTesting.common.success'),
-      detected_format: res.data.detected_format || res.data.format || 'JSON',
-      endpoint_count: res.data.endpoint_count || res.data.total_endpoints || 0
+      detected_format: res.data.doc_type || 'unknown',
+      endpoint_count: (res.data.parsed_endpoints && res.data.parsed_endpoints.length) || 0
     }
   } catch (error) {
     ElMessage.error(error.response?.data?.detail || error.response?.data?.error || t('apiTesting.messages.error.loadFailed'))
     uploadResult.value = null
     fileList.value = []
   } finally {
+    uploading.value = false
     stepLoading.value = false
   }
 }
@@ -463,14 +491,14 @@ const loadQuestions = async () => {
     const envVars = {}
     questions.value.forEach((q) => {
       if (q.field_type === 'string' || q.field_type === 'select') {
-        initAnswers[q.param_name] = q.default_value || ''
+        initAnswers[q.id] = q.default_value || ''
       } else if (q.field_type === 'multi_param') {
         q.options = (q.options || []).map((p) => ({
           ...p,
           user_value: p.default_value || p.user_value || ''
         }))
       } else if (q.field_type === 'env_var_mapping') {
-        q.variables = (q.variables || q.env_vars || []).map((v) => ({
+        q.variables = (q.options || []).map((v) => ({
           original_value: v.original_value || v.originalValue || '',
           var_name: v.var_name || v.varName || ''
         }))
@@ -510,6 +538,7 @@ const removeEnvVar = (question, index) => {
 const generateProgress = ref(0)
 const generateMessage = ref('')
 const savedCount = ref(0)
+const savedRequests = ref([])
 let unsubscribeSSE = null
 
 // Computed: can proceed to next step
@@ -615,9 +644,13 @@ const handleSubmitAnswers = async () => {
     }
   })
 
+  // 转换为后端期望的字典格式
+  const envVarDict = {}
+  environmentVars.forEach(v => { envVarDict[v.original_value] = v.var_name })
+
   await submitImportAnswers(taskId.value, {
     user_answers: userAnswers,
-    environment_vars: environmentVars
+    environment_vars: envVarDict
   })
 
   await handleGenerate()
@@ -652,9 +685,9 @@ const handleGenerate = async () => {
   setTimeout(async () => {
     if (currentStep.value === 4 && generateProgress.value < 100) {
       try {
-        await saveImportRequests(taskId.value)
-        const previewRes = await previewImport(taskId.value)
-        savedCount.value = previewRes.data?.count || previewRes.data?.requests?.length || 0
+        const saveRes = await saveImportRequests(taskId.value)
+        savedCount.value = saveRes.data?.requests_created?.length || 0
+        savedRequests.value = saveRes.data?.requests_created || []
         generateProgress.value = 100
         currentStep.value = 5
       } catch (error) {
@@ -668,7 +701,8 @@ const handleSaveResults = async () => {
   if (!taskId.value) return
   try {
     const res = await saveImportRequests(taskId.value)
-    savedCount.value = res.data?.count || res.data?.created_count || 0
+    savedCount.value = res.data?.requests_created?.length || 0
+    savedRequests.value = res.data?.requests_created || []
     generateProgress.value = 100
     currentStep.value = 5
   } catch (error) {
@@ -684,6 +718,7 @@ const viewResults = () => {
 const resetWizard = () => {
   currentStep.value = 0
   taskId.value = null
+  uploading.value = false
   uploadResult.value = null
   fileList.value = []
   questions.value = []
@@ -691,6 +726,7 @@ const resetWizard = () => {
   generateProgress.value = 0
   generateMessage.value = ''
   savedCount.value = 0
+  savedRequests.value = []
   configForm.project_id = null
   configForm.auto_structure = true
   configForm.collection_id = null
@@ -765,6 +801,21 @@ onUnmounted(() => {
   font-size: 16px;
   font-weight: 500;
   color: #409eff;
+}
+
+/* Upload loading overlay */
+.upload-loading-overlay {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 0;
+}
+
+.upload-loading-text {
+  margin-top: 20px;
+  font-size: 15px;
+  color: #606266;
 }
 
 /* Config radio tips */
@@ -881,26 +932,35 @@ onUnmounted(() => {
   color: #909399;
 }
 
-/* Result step */
-.result-container {
+/* Result step — step-panel-agnostic, full-width */
+.result-panel {
+  max-width: 100%;
+}
+
+.result-header {
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 60px 40px;
+  padding: 20px 0;
+  gap: 12px;
 }
 
-.result-container h3 {
-  margin-top: 20px;
-  margin-bottom: 0;
-  font-size: 20px;
+.result-header h2 {
+  margin: 0;
+  font-size: 22px;
   font-weight: 500;
   color: #303133;
 }
 
+.result-list-card {
+  margin-top: 20px;
+}
+
 .result-actions {
   display: flex;
+  justify-content: center;
   gap: 16px;
-  margin-top: 32px;
+  margin-top: 24px;
 }
 
 /* Bottom Nav */
@@ -910,5 +970,16 @@ onUnmounted(() => {
   gap: 12px;
   padding: 16px 0;
   border-top: 1px solid #ebeef5;
+}
+
+/* Project selector overflow fix */
+.step-panel .el-select {
+  width: 100%;
+}
+
+:deep(.el-select-dropdown__item) {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 </style>

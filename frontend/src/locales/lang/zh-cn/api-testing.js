@@ -907,7 +907,7 @@ export default {
     stepGenerate: '生成中',
     stepResults: '完成',
     dropFileHint: '拖拽 API 文档到此处，或点击上传',
-    supportedFormats: '支持格式：Swagger 2.0、OpenAPI 3.0、Postman Collection、HAR',
+    supportedFormats: '支持 JSON / YAML 格式：Swagger 2.0、OpenAPI 3.0、Postman Collection、HAR',
     endpointsFound: '个端点',
     selectProject: '选择项目',
     structureMode: '导入结构',
@@ -932,6 +932,11 @@ export default {
     next: '下一步',
     generateProgress: '正在生成 API 请求...',
     generateComplete: '生成完成',
-    analyzing: 'AI 正在分析端点...'
+    analyzing: 'AI 正在分析端点...',
+    generatedRequests: '生成的接口列表',
+    method: '方法',
+    name: '接口名称',
+    path: '路径',
+    collection: '所属集合'
   }
 }

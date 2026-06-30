@@ -896,7 +896,7 @@ export default {
     stepGenerate: 'Generating',
     stepResults: 'Complete',
     dropFileHint: 'Drag & drop API document here, or click to select',
-    supportedFormats: 'Supported: Swagger 2.0, OpenAPI 3.0, Postman Collection, HAR',
+    supportedFormats: 'Supported (JSON / YAML): Swagger 2.0, OpenAPI 3.0, Postman Collection, HAR',
     endpointsFound: 'endpoints found',
     selectProject: 'Select Project',
     structureMode: 'Import Structure',
@@ -921,6 +921,11 @@ export default {
     next: 'Next',
     generateProgress: 'Generating API requests...',
     generateComplete: 'Generation complete',
-    analyzing: 'AI is analyzing endpoints...'
+    analyzing: 'AI is analyzing endpoints...',
+    generatedRequests: 'Generated Requests',
+    method: 'Method',
+    name: 'Name',
+    path: 'Path',
+    collection: 'Collection'
   }
 }
