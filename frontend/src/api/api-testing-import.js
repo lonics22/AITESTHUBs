@@ -68,7 +68,8 @@ export function subscribeImportProgress(taskId, onMessage, onError) {
   const xhr = new XMLHttpRequest()
   xhr.open('GET', url, true)
   xhr.withCredentials = true
-  xhr.onprogress = () => {
+
+  const processResponse = () => {
     const lines = xhr.responseText.split('\n')
     for (const line of lines) {
       if (line.startsWith('data: ')) {
@@ -78,6 +79,9 @@ export function subscribeImportProgress(taskId, onMessage, onError) {
       }
     }
   }
+
+  xhr.onprogress = processResponse
+  xhr.onload = processResponse
   xhr.onerror = () => onError?.('SSE connection failed')
   xhr.send()
   return () => xhr.abort()

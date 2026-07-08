@@ -74,12 +74,18 @@ def detect_format(content: dict) -> str:
 
     # Swagger 2.0 -- the 'swagger' key holds the version string
     swagger_ver = content.get("swagger")
-    if isinstance(swagger_ver, str) and swagger_ver.startswith("2."):
+    if isinstance(swagger_ver, str) and swagger_ver.startswith("2"):
+        return "swagger2"
+    # Handle numeric swagger version (e.g. YAML unquoted "2.0" -> float 2.0)
+    if isinstance(swagger_ver, (int, float)) and int(swagger_ver) == 2:
         return "swagger2"
 
     # OpenAPI 3.x -- the 'openapi' key holds the version string
     openapi_ver = content.get("openapi")
-    if isinstance(openapi_ver, str) and openapi_ver.startswith("3."):
+    if isinstance(openapi_ver, str) and openapi_ver.startswith("3"):
+        return "openapi3"
+    # Handle numeric openapi version
+    if isinstance(openapi_ver, (int, float)) and int(openapi_ver) == 3:
         return "openapi3"
 
     # Postman Collection v2.1 -- info.schema points to getpostman.com

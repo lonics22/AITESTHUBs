@@ -16,6 +16,7 @@ import requests
 import time
 import os
 import json
+import re
 import logging
 import uuid
 import subprocess
@@ -47,11 +48,13 @@ from .variable_resolver import VariableResolver
 from .serializers import (
     ApiProjectSerializer, ApiCollectionSerializer, ApiRequestSerializer,
     EnvironmentSerializer, RequestHistorySerializer, TestSuiteSerializer,
+
     TestSuiteRequestSerializer, TestExecutionSerializer, UserSerializer,
     ScheduledTaskSerializer, ScheduledTaskSerializer,
     AIServiceConfigSerializer,
     AIImportTaskSerializer, AIImportUploadSerializer,
     AIImportConfigureSerializer, AIImportAnswersSerializer,
+    AgentReplySerializer,
 )
 from .doc_parser import detect_format, parse_document
 
@@ -61,6 +64,7 @@ try:
 except ImportError:
     HAS_YAML = False
 from .ai_import_service import analyze_endpoints, generate_questions, generate_requests
+from apps.api_testing.ai_agent.agent import ImportAgent
 
 User = get_user_model()
 
@@ -3017,17 +3021,22 @@ class AIImportViewSet(viewsets.GenericViewSet):
 
         try:
             # Phase 3: 生成 API 请求
+            logger.info("=== answers: generate_requests start ===")
+            logger.info("endpoints=%d", len(task.parsed_endpoints or []))
+            logger.info("classification keys=%s", list((task.ai_classification or {}).keys()))
             generated_requests = generate_requests(
                 task.parsed_endpoints,
                 task.ai_classification,
                 task.user_answers,
                 task.environment_vars,
             )
+            logger.info("=== answers: generated %d requests ===", len(generated_requests))
             task.generated_summary = {'requests': generated_requests}
             task.status = 'completed'
             task.progress = 100
             task.save(update_fields=['generated_summary', 'status', 'progress'])
         except Exception as e:
+            logger.error("=== answers: FAILED ===", exc_info=True)
             task.status = 'failed'
             task.error_message = str(e)
             task.progress = 100
@@ -3072,30 +3081,50 @@ class AIImportViewSet(viewsets.GenericViewSet):
             generated_requests = task.generated_summary.get('requests', [])
 
         if not generated_requests:
+            logger.warning("=== save: no generated_requests found in generated_summary ===")
+            logger.warning("task.generated_summary = %s", task.generated_summary)
             return Response(
                 {'error': '没有可保存的请求数据'},
                 status=status.HTTP_400_BAD_REQUEST
             )
+
+        logger.info("=== save: %d generated_requests, auto_structure=%s ===",
+                   len(generated_requests), task.auto_structure)
+        logger.info("=== save: first generated_request sample ===")
+        if generated_requests:
+            logger.info("sample request: %s", json.dumps(generated_requests[0], ensure_ascii=False)[:500])
 
         created_collections = []
         created_request_ids = []
 
         if task.auto_structure:
             # 按标签分组：从原始解析的端点中提取标签
+            # 统一用 {{var}} 形式作为 key（generate_requests 会把 {var} 替换成 {{var}}）
             endpoint_to_tags = {}
             for ep in (task.parsed_endpoints or []):
-                ep_key = f"{ep.get('method', 'GET').upper()} {ep.get('path', '')}"
+                ep_method = str(ep.get('method', 'GET')).upper()
+                ep_path = str(ep.get('path', ''))
+                # 与 generate_requests 一致：{var} -> {{var}}
+                norm_path = re.sub(r"\{(\w+)\}", r"{{\1}}", ep_path)
+                ep_key = f"{ep_method} {norm_path}"
                 tags = ep.get('tags', [])
                 endpoint_to_tags[ep_key] = tags[0] if tags else 'Default'
 
+            logger.info("=== save: auto_structure endpoint_to_tags ===")
+            logger.info("endpoint_to_tags: %s", json.dumps(endpoint_to_tags, ensure_ascii=False))
+
             # 按标签分组生成请求
-            tag_requests = {}
+            tag_requests: Dict[str, list] = {}
             for req_data in generated_requests:
-                req_key = f"{req_data.get('method', 'GET')} {req_data.get('url', '')}"
+                req_method = str(req_data.get('method', 'GET')).upper()
+                req_url = str(req_data.get('url', ''))
+                req_key = f"{req_method} {req_url}"
                 tag = endpoint_to_tags.get(req_key, 'Default')
                 if tag not in tag_requests:
                     tag_requests[tag] = []
                 tag_requests[tag].append(req_data)
+
+            logger.info("tag_requests keys: %s", list(tag_requests.keys()))
 
             # 为每个标签创建集合
             for tag, reqs in tag_requests.items():
@@ -3109,22 +3138,37 @@ class AIImportViewSet(viewsets.GenericViewSet):
                 created_collections.append(collection.id)
 
                 for req_data in reqs:
-                    api_request = ApiRequest.objects.create(
-                        collection=collection,
-                        name=str(req_data.get('name', ''))[:200],
-                        description=req_data.get('description', ''),
-                        method=req_data.get('method', 'GET'),
-                        url=req_data.get('url', ''),
-                        headers=req_data.get('headers', {}),
-                        params=req_data.get('params', {}),
-                        body=req_data.get('body', {}),
-                        auth=req_data.get('auth', {}),
-                        assertions=req_data.get('assertions', []),
-                        pre_request_script=req_data.get('pre_request_script', ''),
-                        post_request_script=req_data.get('post_request_script', ''),
-                        created_by=request.user,
-                    )
-                    created_request_ids.append(api_request.id)
+                    logger.info("=== save: creating request ===")
+                    logger.info("  name: %s", req_data.get('name'))
+                    logger.info("  method: %s", req_data.get('method'))
+                    logger.info("  url: %s", req_data.get('url'))
+                    logger.info("  collection: %s", collection.name)
+                    try:
+                        api_request = ApiRequest.objects.create(
+                            collection=collection,
+                            name=str(req_data.get('name', ''))[:200],
+                            description=req_data.get('description', ''),
+                            method=req_data.get('method', 'GET'),
+                            url=req_data.get('url', ''),
+                            headers=req_data.get('headers', {}),
+                            params=req_data.get('params', {}),
+                            body=req_data.get('body', {}),
+                            auth=req_data.get('auth', {}),
+                            assertions=req_data.get('assertions', []),
+                            pre_request_script=req_data.get('pre_request_script', ''),
+                            post_request_script=req_data.get('post_request_script', ''),
+                            created_by=request.user,
+                        )
+                        logger.info("  created: id=%d", api_request.id)
+                        created_request_ids.append(api_request.id)
+                    except Exception as e:
+                        logger.error("=== save: FAILED to create request ===")
+                        logger.error("error: %s", e)
+                        logger.exception("full traceback")
+                        raise
+
+            logger.info("=== save: created %d collections, %d requests ===",
+                       len(created_collections), len(created_request_ids))
         else:
             # 非自动结构：使用现有集合或创建新集合
             collection = None
@@ -3147,22 +3191,49 @@ class AIImportViewSet(viewsets.GenericViewSet):
             created_collections.append(collection.id)
 
             for req_data in generated_requests:
-                api_request = ApiRequest.objects.create(
-                    collection=collection,
-                    name=str(req_data.get('name', ''))[:200],
-                    description=req_data.get('description', ''),
-                    method=req_data.get('method', 'GET'),
-                    url=req_data.get('url', ''),
-                    headers=req_data.get('headers', {}),
-                    params=req_data.get('params', {}),
-                    body=req_data.get('body', {}),
-                    auth=req_data.get('auth', {}),
-                    assertions=req_data.get('assertions', []),
-                    pre_request_script=req_data.get('pre_request_script', ''),
-                    post_request_script=req_data.get('post_request_script', ''),
-                    created_by=request.user,
-                )
-                created_request_ids.append(api_request.id)
+                logger.info("=== save: creating request (manual mode) ===")
+                logger.info("  name: %s", req_data.get('name'))
+                logger.info("  method: %s", req_data.get('method'))
+                logger.info("  url: %s", req_data.get('url'))
+                logger.info("  collection: %s", collection.name)
+                try:
+                    api_request = ApiRequest.objects.create(
+                        collection=collection,
+                        name=str(req_data.get('name', ''))[:200],
+                        description=req_data.get('description', ''),
+                        method=req_data.get('method', 'GET'),
+                        url=req_data.get('url', ''),
+                        headers=req_data.get('headers', {}),
+                        params=req_data.get('params', {}),
+                        body=req_data.get('body', {}),
+                        auth=req_data.get('auth', {}),
+                        assertions=req_data.get('assertions', []),
+                        pre_request_script=req_data.get('pre_request_script', ''),
+                        post_request_script=req_data.get('post_request_script', ''),
+                        created_by=request.user,
+                    )
+                    logger.info("  created: id=%d", api_request.id)
+                    created_request_ids.append(api_request.id)
+                except Exception as e:
+                    logger.error("=== save: FAILED to create request (manual mode) ===")
+                    logger.error("error: %s", e)
+                    logger.exception("full traceback")
+                    raise
+
+        # 生成前端所需的请求详情列表
+        requests_details = []
+        if created_request_ids:
+            created_qs = ApiRequest.objects.filter(id__in=created_request_ids).select_related('collection')
+            for req in created_qs:
+                requests_details.append({
+                    'id': req.id,
+                    'name': req.name,
+                    'method': req.method,
+                    'url': req.url,
+                    'path': req.url,
+                    'collection': req.collection_id,
+                    'collection_name': req.collection.name if req.collection else None,
+                })
 
         # 更新 generated_summary 记录集合和请求的 ID
         if not isinstance(task.generated_summary, dict):
@@ -3176,9 +3247,68 @@ class AIImportViewSet(viewsets.GenericViewSet):
                        f'{len(created_collections)} 个集合',
             'collections_created': created_collections,
             'requests_created': created_request_ids,
+            'requests_details': requests_details,
         })
 
-    # ----- 7. SSE 流式日志 -----
+    # ----- 7. Agent 状态查询 -----
+    @action(detail=True, methods=['get'])
+    def agent_state(self, request, pk=None):
+        """获取 Agent 当前状态（对话历史、进度、待回答问题）"""
+        task = self.get_object()
+
+        # 从 generated_summary 中恢复 agent 消息
+        messages = []
+        if isinstance(task.generated_summary, dict):
+            messages = task.generated_summary.get("agent_messages", [])
+
+        return Response({
+            "status": task.status,
+            "progress": task.progress,
+            "messages": messages,
+            "parsed_endpoints": task.parsed_endpoints or [],
+            "classification_summary": {
+                "endpoint_count": (task.ai_classification or {}).get("endpoint_count", 0),
+                "total_params": (task.ai_classification or {}).get("total_params", 0),
+                "auto_params": (task.ai_classification or {}).get("auto_params", 0),
+                "manual_params": (task.ai_classification or {}).get("manual_params", 0),
+            } if task.ai_classification else None,
+        })
+
+    # ----- 8. Agent 回复 -----
+    @action(detail=True, methods=['post'])
+    def agent_reply(self, request, pk=None):
+        """用户回复 Agent 的提问，触发 Agent 继续执行"""
+        task = self.get_object()
+        serializer = AgentReplySerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        user_message = serializer.validated_data.get("message", "")
+        user_answers = serializer.validated_data.get("answers", {})
+
+        try:
+            agent = ImportAgent(task.id)
+            result = agent.resume(user_message, user_answers)
+
+            # 保存对话消息到 task
+            messages = result.get("messages", [])
+            if isinstance(task.generated_summary, dict):
+                task.generated_summary["agent_messages"] = messages
+                task.save(update_fields=["generated_summary"])
+
+            return Response({
+                "status": result.get("status"),
+                "progress": result.get("progress", 0),
+                "messages": messages[-10:],
+                "error": result.get("error"),
+            })
+        except Exception as e:
+            logger.exception("agent_reply failed")
+            return Response(
+                {"error": f"Agent 处理失败: {str(e)}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+    # ----- 9. SSE 流式日志 -----
     @action(detail=True, methods=['get'])
     def logs(self, request, pk=None):
         """SSE 流式推送任务进度"""
@@ -3209,7 +3339,7 @@ class AIImportViewSet(viewsets.GenericViewSet):
             content_type='text/event-stream',
         )
 
-    # ----- 8. 任务列表 -----
+    # ----- 10. 任务列表 -----
     @action(detail=False, methods=['get'])
     def list_tasks(self, request):
         """获取当前用户的任务列表，可按 project_id 过滤"""

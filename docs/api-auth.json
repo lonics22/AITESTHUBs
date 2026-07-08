@@ -1,175 +1,319 @@
 {
-  "_base_url": "http://localhost:8000",
-  "_description": "TestHub 用户认证 API",
-
-  "register": {
-    "method": "POST",
-    "url": "/api/auth/register/",
-    "auth": "无需认证",
-    "content-type": "application/json",
-    "request": {
-      "username": "必填",
-      "email": "必填",
-      "password": "必填, 最小6位",
-      "password_confirm": "必填, 需与 password 一致",
-      "first_name": "选填",
-      "last_name": "选填",
-      "phone": "选填",
-      "department": "选填",
-      "position": "选填"
-    },
-    "request_example": {
-      "username": "newuser",
-      "email": "newuser@example.com",
-      "password": "pass123456",
-      "password_confirm": "pass123456"
-    },
-    "response_success_201": {
-      "user": {
-        "id": 3,
-        "username": "newuser",
-        "email": "newuser@example.com",
-        "first_name": "",
-        "last_name": "",
-        "avatar": null,
-        "phone": null,
-        "department": null,
-        "position": null,
-        "is_active": true,
-        "date_joined": "2026-06-30T10:00:00+08:00",
-        "created_at": "2026-06-30T10:00:00+08:00",
-        "updated_at": "2026-06-30T10:00:00+08:00"
-      },
-      "token": "3f8a9b2c1d..."
-    }
+  "openapi": "3.0.3",
+  "info": {
+    "title": "TestHub 用户认证 API",
+    "description": "TestHub 平台用户认证接口，包含注册、登录、token 刷新、个人信息等",
+    "version": "1.0.0"
   },
-
-  "login": {
-    "method": "POST",
-    "url": "/api/auth/login/",
-    "auth": "无需认证",
-    "content-type": "application/json",
-    "request": {
-      "username": "必填",
-      "password": "必填"
-    },
-    "request_example": {
-      "username": "admin",
-      "password": "admin123"
-    },
-    "response_success_200": {
-      "user": {
-        "id": 1,
-        "username": "admin",
-        "email": "admin@testhub.com",
-        "first_name": "",
-        "last_name": "",
-        "avatar": null,
-        "phone": null,
-        "department": null,
-        "position": null,
-        "is_active": true,
-        "date_joined": "2026-01-01T00:00:00+08:00",
-        "created_at": "2026-01-01T00:00:00+08:00",
-        "updated_at": "2026-01-01T00:00:00+08:00"
-      },
-      "access": "eyJhbGciOiJIUzI1NiIs...",
-      "refresh": "eyJhbGciOiJIUzI1NiIs...",
-      "message": "登录成功"
-    },
-    "response_error_400": {
-      "non_field_errors": ["用户名或密码错误"]
+  "servers": [
+    {
+      "url": "http://localhost:8000",
+      "description": "本地开发服务器"
     }
-  },
-
-  "me": {
-    "method": "GET",
-    "url": "/api/auth/me/",
-    "auth": "需要 Bearer Token",
-    "headers": {
-      "Authorization": "Bearer <access_token>"
-    },
-    "response_success_200": {
-      "id": 1,
-      "username": "admin",
-      "email": "admin@testhub.com",
-      "first_name": "",
-      "last_name": "",
-      "avatar": null,
-      "phone": null,
-      "department": null,
-      "position": null,
-      "is_active": true,
-      "date_joined": "2026-01-01T00:00:00+08:00",
-      "created_at": "2026-01-01T00:00:00+08:00",
-      "updated_at": "2026-01-01T00:00:00+08:00"
-    }
-  },
-
-  "profile": {
-    "method": "GET",
-    "url": "/api/auth/profile/",
-    "auth": "需要 Bearer Token",
-    "headers": {
-      "Authorization": "Bearer <access_token>"
-    },
-    "response_success_200": {
-      "id": 1,
-      "username": "admin",
-      "email": "admin@testhub.com",
-      "first_name": "",
-      "last_name": "",
-      "avatar": null,
-      "phone": null,
-      "department": null,
-      "position": null,
-      "is_active": true,
-      "date_joined": "2026-01-01T00:00:00+08:00",
-      "created_at": "2026-01-01T00:00:00+08:00",
-      "updated_at": "2026-01-01T00:00:00+08:00"
-    }
-  },
-
-  "users": {
-    "method": "GET",
-    "url": "/api/auth/users/",
-    "auth": "需要 Bearer Token",
-    "headers": {
-      "Authorization": "Bearer <access_token>"
-    },
-    "response_success_200": [
-      {
-        "id": 1,
-        "username": "admin",
-        "email": "admin@testhub.com",
-        "first_name": "",
-        "last_name": "",
-        "avatar": null,
-        "phone": null,
-        "department": null,
-        "position": null,
-        "is_active": true,
-        "date_joined": "2026-01-01T00:00:00+08:00",
-        "created_at": "2026-01-01T00:00:00+08:00",
-        "updated_at": "2026-01-01T00:00:00+08:00"
+  ],
+  "paths": {
+    "/api/auth/register/": {
+      "post": {
+        "tags": ["认证"],
+        "summary": "用户注册",
+        "operationId": "register",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["username", "email", "password", "password_confirm"],
+                "properties": {
+                  "username": {"type": "string", "description": "用户名"},
+                  "email": {"type": "string", "format": "email", "description": "邮箱"},
+                  "password": {"type": "string", "minLength": 6, "description": "密码，最小6位"},
+                  "password_confirm": {"type": "string", "description": "确认密码，需与 password 一致"},
+                  "first_name": {"type": "string", "description": "名（选填）"},
+                  "last_name": {"type": "string", "description": "姓（选填）"},
+                  "phone": {"type": "string", "description": "电话（选填）"},
+                  "department": {"type": "string", "description": "部门（选填）"},
+                  "position": {"type": "string", "description": "职位（选填）"}
+                }
+              },
+              "example": {
+                "username": "newuser",
+                "email": "newuser@example.com",
+                "password": "pass123456",
+                "password_confirm": "pass123456"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "注册成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "user": {
+                      "type": "object",
+                      "properties": {
+                        "id": {"type": "integer"},
+                        "username": {"type": "string"},
+                        "email": {"type": "string"},
+                        "first_name": {"type": "string"},
+                        "last_name": {"type": "string"},
+                        "avatar": {"type": "string", "nullable": true},
+                        "phone": {"type": "string", "nullable": true},
+                        "department": {"type": "string", "nullable": true},
+                        "position": {"type": "string", "nullable": true},
+                        "is_active": {"type": "boolean"},
+                        "date_joined": {"type": "string", "format": "date-time"},
+                        "created_at": {"type": "string", "format": "date-time"},
+                        "updated_at": {"type": "string", "format": "date-time"}
+                      }
+                    },
+                    "token": {"type": "string", "description": "认证 token"}
+                  }
+                },
+                "example": {
+                  "user": {
+                    "id": 3,
+                    "username": "newuser",
+                    "email": "newuser@example.com",
+                    "first_name": "",
+                    "last_name": "",
+                    "avatar": null,
+                    "phone": null,
+                    "department": null,
+                    "position": null,
+                    "is_active": true,
+                    "date_joined": "2026-06-30T10:00:00+08:00",
+                    "created_at": "2026-06-30T10:00:00+08:00",
+                    "updated_at": "2026-06-30T10:00:00+08:00"
+                  },
+                  "token": "3f8a9b2c1d..."
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "请求参数错误"
+          }
+        }
       }
-    ]
+    },
+    "/api/auth/login/": {
+      "post": {
+        "tags": ["认证"],
+        "summary": "用户登录",
+        "operationId": "login",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["username", "password"],
+                "properties": {
+                  "username": {"type": "string", "description": "用户名"},
+                  "password": {"type": "string", "description": "密码"}
+                }
+              },
+              "example": {
+                "username": "admin",
+                "password": "admin123"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "登录成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "user": {"type": "object"},
+                    "access": {"type": "string", "description": "JWT access token"},
+                    "refresh": {"type": "string", "description": "JWT refresh token"},
+                    "message": {"type": "string"}
+                  }
+                },
+                "example": {
+                  "user": {
+                    "id": 1,
+                    "username": "admin",
+                    "email": "admin@testhub.com"
+                  },
+                  "access": "eyJhbGciOiJIUzI1NiIs...",
+                  "refresh": "eyJhbGciOiJIUzI1NiIs...",
+                  "message": "登录成功"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "用户名或密码错误"
+          }
+        }
+      }
+    },
+    "/api/auth/token/refresh/": {
+      "post": {
+        "tags": ["认证"],
+        "summary": "刷新 Token",
+        "operationId": "token_refresh",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["refresh"],
+                "properties": {
+                  "refresh": {"type": "string", "description": "登录时返回的 refresh token"}
+                }
+              },
+              "example": {
+                "refresh": "eyJhbGciOiJIUzI1NiIs..."
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "刷新成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "access": {"type": "string", "description": "新的 access token"},
+                    "access_token_expiration": {"type": "string", "format": "date-time"}
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/me/": {
+      "get": {
+        "tags": ["用户"],
+        "summary": "当前用户信息",
+        "operationId": "getCurrentUser",
+        "security": [{"BearerAuth": []}],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {"type": "integer"},
+                    "username": {"type": "string"},
+                    "email": {"type": "string"},
+                    "first_name": {"type": "string"},
+                    "last_name": {"type": "string"},
+                    "avatar": {"type": "string", "nullable": true},
+                    "phone": {"type": "string", "nullable": true},
+                    "department": {"type": "string", "nullable": true},
+                    "position": {"type": "string", "nullable": true},
+                    "is_active": {"type": "boolean"},
+                    "date_joined": {"type": "string", "format": "date-time"},
+                    "created_at": {"type": "string", "format": "date-time"},
+                    "updated_at": {"type": "string", "format": "date-time"}
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/profile/": {
+      "get": {
+        "tags": ["用户"],
+        "summary": "用户资料",
+        "operationId": "getUserProfile",
+        "security": [{"BearerAuth": []}],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {"type": "integer"},
+                    "username": {"type": "string"},
+                    "email": {"type": "string"},
+                    "first_name": {"type": "string"},
+                    "last_name": {"type": "string"},
+                    "avatar": {"type": "string", "nullable": true},
+                    "phone": {"type": "string", "nullable": true},
+                    "department": {"type": "string", "nullable": true},
+                    "position": {"type": "string", "nullable": true},
+                    "is_active": {"type": "boolean"},
+                    "date_joined": {"type": "string", "format": "date-time"},
+                    "created_at": {"type": "string", "format": "date-time"},
+                    "updated_at": {"type": "string", "format": "date-time"}
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/users/": {
+      "get": {
+        "tags": ["用户"],
+        "summary": "用户列表",
+        "operationId": "listUsers",
+        "security": [{"BearerAuth": []}],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {"type": "integer"},
+                      "username": {"type": "string"},
+                      "email": {"type": "string"},
+                      "first_name": {"type": "string"},
+                      "last_name": {"type": "string"},
+                      "avatar": {"type": "string", "nullable": true},
+                      "phone": {"type": "string", "nullable": true},
+                      "department": {"type": "string", "nullable": true},
+                      "position": {"type": "string", "nullable": true},
+                      "is_active": {"type": "boolean"},
+                      "date_joined": {"type": "string", "format": "date-time"},
+                      "created_at": {"type": "string", "format": "date-time"},
+                      "updated_at": {"type": "string", "format": "date-time"}
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
   },
-
-  "token_refresh": {
-    "method": "POST",
-    "url": "/api/auth/token/refresh/",
-    "auth": "无需认证（需提供 refresh token）",
-    "content-type": "application/json",
-    "request": {
-      "refresh": "必填, 登录时返回的 refresh token"
-    },
-    "request_example": {
-      "refresh": "eyJhbGciOiJIUzI1NiIs..."
-    },
-    "response_success_200": {
-      "access": "eyJhbGciOiJIUzI1NiIs...",
-      "access_token_expiration": "2026-06-30T11:00:00+08:00"
+  "components": {
+    "securitySchemes": {
+      "BearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT"
+      }
     }
   }
 }

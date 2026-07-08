@@ -128,6 +128,7 @@ def _extract_body_params(request_body: Optional[Dict[str, Any]]) -> List[Dict[st
             continue
 
         # Object with properties
+        has_properties = False
         if schema.get("type") == "object" or "properties" in schema:
             properties = schema.get("properties", {})
             required_fields = schema.get("required", [])
@@ -148,18 +149,26 @@ def _extract_body_params(request_body: Optional[Dict[str, Any]]) -> List[Dict[st
                 if "enum" in prop_schema:
                     param["enum"] = list(prop_schema["enum"])
                 params.append(param)
+            if properties:
+                has_properties = True
 
-        # Example-based schema (e.g. Postman raw bodies)
+        # Example-based schema — only for keys NOT already covered by properties
         example = schema.get("example")
         if isinstance(example, dict):
+            existing_names = {p["name"] for p in params}
+            # Fill in defaults from example for matching params
+            param_by_name = {p["name"]: p for p in params}
             for key, value in example.items():
-                params.append({
-                    "name": key,
-                    "location": "body",
-                    "type": _python_type_to_string(type(value)),
-                    "description": "",
-                    "required": False,
-                })
+                if key in param_by_name and "default" not in param_by_name[key]:
+                    param_by_name[key]["default"] = value
+                elif key not in existing_names:
+                    params.append({
+                        "name": key,
+                        "location": "body",
+                        "type": _python_type_to_string(type(value)),
+                        "description": "",
+                        "required": False,
+                    })
 
     return params
 
@@ -704,8 +713,15 @@ def generate_requests(
     class_map = classification.get("classification", classification)
     requests: List[Dict[str, Any]] = []
 
-    for ep in parsed_endpoints:
-        endpoint_key = f"{ep['method'].upper()} {ep['path']}"
+    for idx, ep in enumerate(parsed_endpoints):
+        if not isinstance(ep, dict):
+            logger.warning("generate_requests: skipping non-dict endpoint at index %d", idx)
+            continue
+
+        ep_method = str(ep.get("method", "GET")).upper()
+        ep_path = str(ep.get("path", ""))
+        endpoint_key = f"{ep_method} {ep_path}"
+
         classified = class_map.get(endpoint_key, {
             "auto": [], "manual": [], "context_ref": [],
         })
@@ -713,12 +729,12 @@ def generate_requests(
         # -- Build display name ------------------------------------------------
         name = (ep.get("summary") or "").strip()
         if not name:
-            name = f"{ep['method'].upper()} {ep['path']}"
+            name = endpoint_key
 
         description = ep.get("description", "") or ""
 
         # -- Replace {path_param} with {{path_param}} template syntax ----------
-        url = re.sub(r"\{(\w+)\}", r"{{\1}}", ep.get("path", ""))
+        url = re.sub(r"\{(\w+)\}", r"{{\1}}", ep_path)
 
         # -- Build headers, params, body from classified params ----------------
         headers: Dict[str, str] = {}
@@ -733,18 +749,38 @@ def generate_requests(
 
         for param in classified.get("manual", []):
             value = _lookup_user_value(
-                param["name"], endpoint_key, user_answers, environment_vars,
+                param.get("name", ""), endpoint_key, user_answers, environment_vars,
             )
+            if not value:
+                value = str(param.get("default", "")) or str(param.get("example", "")) or ""
             _assign_param(param, headers, params, body, value)
 
         for param in classified.get("context_ref", []):
             ctx_value = _lookup_user_value(
-                param["name"], endpoint_key, user_answers, environment_vars,
+                param.get("name", ""), endpoint_key, user_answers, environment_vars,
             )
+            if not ctx_value:
+                ctx_value = str(param.get("default", "")) or str(param.get("example", "")) or ""
             _assign_param(param, headers, params, body, ctx_value)
 
         # -- Resolve auth ------------------------------------------------------
         auth = _build_auth(headers, user_answers)
+
+        # Fallback: detect auth from endpoint OpenAPI security spec
+        if auth.get("type") == "none":
+            ep_security = ep.get("security", [])
+            for sec_req in ep_security if isinstance(ep_security, list) else []:
+                if isinstance(sec_req, dict):
+                    for scheme_name in sec_req:
+                        name_lower = scheme_name.lower()
+                        if "bearer" in name_lower:
+                            auth = {"type": "bearer"}
+                            break
+                        elif "basic" in name_lower:
+                            auth = {"type": "basic"}
+                            break
+                    if auth.get("type") != "none":
+                        break
 
         # If auth is bearer and there's no Authorization header, add one
         if auth.get("type") == "bearer" and "Authorization" not in headers:
@@ -753,11 +789,11 @@ def generate_requests(
         requests.append({
             "name": name,
             "description": description,
-            "method": ep["method"].upper(),
+            "method": ep_method,
             "url": url,
             "headers": headers,
             "params": params,
-            "body": body if body else {},
+            "body": {"type": "json", "data": body} if body else {},
             "auth": auth,
         })
 
@@ -773,7 +809,7 @@ def _assign_param(
 ) -> None:
     """Place a parameter value into the appropriate request section."""
     location = param.get("location", "query")
-    name = param["name"]
+    name = param.get("name", "")
 
     if location == "header":
         headers[name] = value

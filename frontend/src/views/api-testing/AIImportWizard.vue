@@ -92,15 +92,15 @@
             </el-form-item>
 
             <el-form-item :label="$t('apiTesting.aiImport.structureMode')">
-              <el-radio-group v-model="configForm.auto_structure">
+              <el-radio-group v-model="configForm.auto_structure" class="structure-radio-group">
                 <el-radio :value="true" border>
-                  <div>
+                  <div class="radio-content">
                     <strong>{{ $t('apiTesting.aiImport.autoStructureLabel') }}</strong>
                     <p class="radio-tip">{{ $t('apiTesting.aiImport.autoStructureTip') }}</p>
                   </div>
                 </el-radio>
                 <el-radio :value="false" border>
-                  <div>
+                  <div class="radio-content">
                     <strong>{{ $t('apiTesting.aiImport.specificCollectionLabel') }}</strong>
                     <p class="radio-tip">{{ $t('apiTesting.aiImport.selectCollection') }}</p>
                   </div>
@@ -128,10 +128,10 @@
       </div>
 
       <!-- Step 2: Analysis (auto) -->
-      <div v-show="currentStep === 2" class="step-panel">
+      <div v-show="currentStep === 2" class="analysis-panel">
         <el-card>
           <div class="analysis-loading">
-            <el-progress type="circle" :percentage="50" :width="120" :stroke-width="6" indeterminate />
+            <el-progress type="circle" :percentage="50" :width="160" :stroke-width="8" indeterminate />
             <p class="analysis-text">{{ $t('apiTesting.aiImport.analyzing') }}</p>
           </div>
         </el-card>
@@ -671,7 +671,13 @@ const handleGenerate = async () => {
       if (data.message) {
         generateMessage.value = data.message
       }
-      if (data.status === 'completed' || data.progress >= 100) {
+
+      if (data.status === 'failed') {
+        ElMessage.error(data.error_message || t('apiTesting.messages.error.saveFailed'))
+        return
+      }
+
+      if (data.status === 'completed') {
         handleSaveResults()
       }
     },
@@ -687,26 +693,30 @@ const handleGenerate = async () => {
       try {
         const saveRes = await saveImportRequests(taskId.value)
         savedCount.value = saveRes.data?.requests_created?.length || 0
-        savedRequests.value = saveRes.data?.requests_created || []
+        savedRequests.value = saveRes.data?.requests_details || []
         generateProgress.value = 100
         currentStep.value = 5
       } catch (error) {
-        ElMessage.error(error.response?.data?.detail || t('apiTesting.messages.error.saveFailed'))
+        ElMessage.error(error.response?.data?.detail || error.response?.data?.error || t('apiTesting.messages.error.saveFailed'))
       }
     }
   }, 30000) // 30s fallback
 }
 
+let isSaving = false
 const handleSaveResults = async () => {
-  if (!taskId.value) return
+  if (!taskId.value || isSaving) return
+  isSaving = true
   try {
     const res = await saveImportRequests(taskId.value)
     savedCount.value = res.data?.requests_created?.length || 0
-    savedRequests.value = res.data?.requests_created || []
+    savedRequests.value = res.data?.requests_details || []
     generateProgress.value = 100
     currentStep.value = 5
   } catch (error) {
-    ElMessage.error(error.response?.data?.detail || t('apiTesting.messages.error.saveFailed'))
+    ElMessage.error(error.response?.data?.detail || error.response?.data?.error || t('apiTesting.messages.error.saveFailed'))
+  } finally {
+    isSaving = false
   }
 }
 
@@ -826,18 +836,41 @@ onUnmounted(() => {
   font-weight: normal;
 }
 
-/* Analysis step */
+/* Analysis step — full-width, bigger loading */
+.analysis-panel {
+  max-width: 100%;
+}
+
 .analysis-loading {
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 60px 0;
+  padding: 80px 0;
 }
 
 .analysis-text {
-  margin-top: 24px;
-  font-size: 16px;
+  margin-top: 28px;
+  font-size: 18px;
   color: #606266;
+}
+
+/* Structure radio group — vertical stack to avoid text overflow */
+.structure-radio-group {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+}
+
+.structure-radio-group .el-radio {
+  width: 100%;
+  margin-right: 0;
+  height: auto;
+  padding: 12px 16px;
+}
+
+.radio-content {
+  line-height: 1.5;
 }
 
 /* Questions */
