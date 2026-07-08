@@ -3251,7 +3251,7 @@ class AIImportViewSet(viewsets.GenericViewSet):
         })
 
     # ----- 7. Agent 状态查询 -----
-    @action(detail=True, methods=['get'])
+    @action(detail=True, methods=['get'], url_path='agent-state')
     def agent_state(self, request, pk=None):
         """获取 Agent 当前状态（对话历史、进度、待回答问题）"""
         task = self.get_object()
@@ -3275,7 +3275,7 @@ class AIImportViewSet(viewsets.GenericViewSet):
         })
 
     # ----- 8. Agent 回复 -----
-    @action(detail=True, methods=['post'])
+    @action(detail=True, methods=['post'], url_path='agent-reply')
     def agent_reply(self, request, pk=None):
         """用户回复 Agent 的提问，触发 Agent 继续执行"""
         task = self.get_object()
