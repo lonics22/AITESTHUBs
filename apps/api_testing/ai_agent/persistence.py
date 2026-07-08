@@ -27,10 +27,9 @@ class DjangoCheckpointSaver(BaseCheckpointSaver):
 
         try:
             task = AIImportTask.objects.get(id=task_id)
-            task.generated_summary = {
-                "agent_state": checkpoint,
-                "agent_metadata": metadata,
-            }
+            current = task.generated_summary or {}
+            current.update({"agent_state": checkpoint, "agent_metadata": metadata})
+            task.generated_summary = current
             task.save(update_fields=["generated_summary"])
         except AIImportTask.DoesNotExist:
             logger.warning("DjangoCheckpointSaver: task %s not found", task_id)

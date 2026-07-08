@@ -464,8 +464,8 @@ const sendAgentMessage = async () => {
     if (res.status === 'completed') {
       currentStep.value = 3
       const saveRes = await saveImportRequests(taskId.value)
-      savedCount.value = saveRes.data?.requests_created?.length || 0
-      savedRequests.value = saveRes.data?.requests_details || []
+      savedCount.value = saveRes.requests_created?.length || saveRes.count || 0
+      savedRequests.value = saveRes.requests_details || []
     }
   } catch (e) {
     ElMessage.error('Agent 处理失败')

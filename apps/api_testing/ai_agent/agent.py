@@ -105,14 +105,7 @@ def generate_node(state: AgentState) -> dict:
             "endpoints": endpoints,
             "classification": classification,
             "user_answers": user_answers,
-            "tester_prompt": ENDPOINT_GENERATION_PROMPT.format(
-                method="{method}",
-                path="{path}",
-                summary="{summary}",
-                description="{description}",
-                parameters="{parameters}",
-                output_schema=OUTPUT_SCHEMA_CONSTRAINT,
-            ),
+            "tester_prompt": "",  # Placeholder — P1 will integrate actual prompt
         })
         return {
             "status": "generated",
@@ -300,19 +293,26 @@ class ImportAgent:
 
         try:
             task = AIImportTask.objects.get(id=self.task_id)
-            task.status = state.get("status", "failed")
-            task.progress = state.get("progress", 0)
+            updates = []
             if state.get("parsed_endpoints"):
                 task.parsed_endpoints = state["parsed_endpoints"]
+                updates.append("parsed_endpoints")
             if state.get("classification"):
                 task.ai_classification = state["classification"]
+                updates.append("ai_classification")
             if state.get("generated_requests"):
                 summary = task.generated_summary or {}
                 summary["requests"] = state["generated_requests"]
                 task.generated_summary = summary
+                updates.append("generated_summary")
             if state.get("error"):
                 task.error_message = state["error"]
-            task.save()
+                updates.append("error_message")
+            task.status = state.get("status", "failed")
+            updates.append("status")
+            task.progress = state.get("progress", 0)
+            updates.append("progress")
+            task.save(update_fields=updates)
         except AIImportTask.DoesNotExist:
             logger.warning("ImportAgent: task %s not found for state sync", self.task_id)
 
