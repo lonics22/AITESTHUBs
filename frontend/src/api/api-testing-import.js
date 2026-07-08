@@ -86,3 +86,18 @@ export function subscribeImportProgress(taskId, onMessage, onError) {
   xhr.send()
   return () => xhr.abort()
 }
+
+export function getAgentState(taskId) {
+  return request({
+    url: `/api-testing/ai-import/${taskId}/agent-state/`,
+    method: 'get'
+  })
+}
+
+export function sendAgentReply(taskId, data) {
+  return request({
+    url: `/api-testing/ai-import/${taskId}/agent-reply/`,
+    method: 'post',
+    data
+  })
+}

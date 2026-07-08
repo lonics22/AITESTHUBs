@@ -902,9 +902,7 @@ export default {
     title: 'AI 导入',
     stepUpload: '上传文档',
     stepConfig: '项目配置',
-    stepAnalysis: 'AI 分析',
-    stepQuestions: '参数配置',
-    stepGenerate: '生成中',
+    stepAgent: 'AI Agent',
     stepResults: '完成',
     dropFileHint: '拖拽 API 文档到此处，或点击上传',
     supportedFormats: '支持 JSON / YAML 格式：Swagger 2.0、OpenAPI 3.0、Postman Collection、HAR',
@@ -937,6 +935,7 @@ export default {
     method: '方法',
     name: '接口名称',
     path: '路径',
-    collection: '所属集合'
+    collection: '所属集合',
+    chatPlaceholder: '回复 Agent 的消息...'
   }
 }

@@ -891,9 +891,7 @@ export default {
     title: 'AI Import',
     stepUpload: 'Upload Document',
     stepConfig: 'Configure Project',
-    stepAnalysis: 'AI Analysis',
-    stepQuestions: 'Configure Values',
-    stepGenerate: 'Generating',
+    stepAgent: 'AI Agent',
     stepResults: 'Complete',
     dropFileHint: 'Drag & drop API document here, or click to select',
     supportedFormats: 'Supported (JSON / YAML): Swagger 2.0, OpenAPI 3.0, Postman Collection, HAR',
@@ -926,6 +924,7 @@ export default {
     method: 'Method',
     name: 'Name',
     path: 'Path',
-    collection: 'Collection'
+    collection: 'Collection',
+    chatPlaceholder: 'Reply to Agent...'
   }
 }

@@ -8,9 +8,7 @@
     <el-steps :active="currentStep" align-center class="wizard-steps">
       <el-step :title="$t('apiTesting.aiImport.stepUpload')" />
       <el-step :title="$t('apiTesting.aiImport.stepConfig')" />
-      <el-step :title="$t('apiTesting.aiImport.stepAnalysis')" />
-      <el-step :title="$t('apiTesting.aiImport.stepQuestions')" />
-      <el-step :title="$t('apiTesting.aiImport.stepGenerate')" />
+      <el-step :title="$t('apiTesting.aiImport.stepAgent')" />
       <el-step :title="$t('apiTesting.aiImport.stepResults')" />
     </el-steps>
 
@@ -127,167 +125,57 @@
         </el-card>
       </div>
 
-      <!-- Step 2: Analysis (auto) -->
-      <div v-show="currentStep === 2" class="analysis-panel">
-        <el-card>
-          <div class="analysis-loading">
-            <el-progress type="circle" :percentage="50" :width="160" :stroke-width="8" indeterminate />
-            <p class="analysis-text">{{ $t('apiTesting.aiImport.analyzing') }}</p>
+      <!-- Step 2: Agent Chat -->
+      <div v-show="currentStep === 2" class="step-panel agent-chat-panel">
+        <el-card class="chat-card">
+          <div class="chat-messages" ref="chatRef">
+            <div v-for="(msg, idx) in chatMessages" :key="idx"
+                 :class="['message', msg.role === 'agent' ? 'agent-message' : 'user-message']">
+              <div class="message-bubble">
+                <div class="message-avatar">
+                  <el-avatar :size="32" :icon="msg.role === 'agent' ? 'Monitor' : 'UserFilled'" />
+                </div>
+                <div class="message-content">
+                  <div class="message-text">{{ msg.content }}</div>
+                </div>
+              </div>
+            </div>
+            <div v-if="agentLoading" class="message agent-message">
+              <div class="message-bubble">
+                <div class="message-avatar">
+                  <el-avatar :size="32" icon="Monitor" />
+                </div>
+                <div class="message-content">
+                  <el-progress :percentage="100" :stroke-width="4" indeterminate />
+                  <span class="thinking-text">Agent 思考中...</span>
+                </div>
+              </div>
+            </div>
           </div>
-        </el-card>
-      </div>
 
-      <!-- Step 3: Questions -->
-      <div v-show="currentStep === 3" class="step-panel">
-        <el-alert
-          :title="$t('apiTesting.aiImport.questionsHint')"
-          type="info"
-          :closable="false"
-          show-icon
-          class="questions-hint"
-        />
-        <div class="questions-list">
-          <el-card
-            v-for="(question, qIndex) in questions"
-            :key="qIndex"
-            class="question-card"
-          >
-            <template #header>
-              <div class="question-header">
-                <span class="question-title">{{ question.title }}</span>
-                <el-tag size="small" type="info">{{ question.field_type }}</el-tag>
-              </div>
-              <div v-if="question.description" class="question-desc">
-                {{ question.description }}
-              </div>
-            </template>
-
-            <!-- string type -->
+          <div class="chat-input-area">
             <el-input
-              v-if="question.field_type === 'string'"
-              v-model="answers[question.id]"
-              :placeholder="$t('apiTesting.aiImport.inputPlaceholder')"
-              clearable
+              v-model="userInput"
+              type="textarea"
+              :rows="2"
+              :placeholder="$t('apiTesting.aiImport.chatPlaceholder')"
+              :disabled="agentLoading"
+              @keyup.enter.ctrl="sendAgentMessage"
             />
-
-            <!-- select type -->
-            <el-select
-              v-else-if="question.field_type === 'select'"
-              v-model="answers[question.id]"
-              :placeholder="$t('apiTesting.common.pleaseSelect')"
-              style="width: 100%"
-              filterable
-              allow-create
-              clearable
+            <el-button
+              type="primary"
+              :loading="agentLoading"
+              :disabled="!userInput.trim()"
+              @click="sendAgentMessage"
             >
-              <el-option
-                v-for="opt in question.options"
-                :key="opt.value || opt"
-                :label="opt.label || opt"
-                :value="opt.value || opt"
-              />
-            </el-select>
-
-            <!-- multi_param type -->
-            <div v-else-if="question.field_type === 'multi_param'" class="multi-param-table">
-              <el-table :data="question.options || []" size="small" max-height="400">
-                <el-table-column :label="$t('apiTesting.aiImport.paramName')" prop="param_name" width="160" />
-                <el-table-column :label="$t('apiTesting.aiImport.location')" prop="location" width="100">
-                  <template #default="{ row }">
-                    <el-tag size="small" :type="locationTagType(row.location)">
-                      {{ row.location }}
-                    </el-tag>
-                  </template>
-                </el-table-column>
-                <el-table-column :label="$t('apiTesting.aiImport.endpoint')" prop="endpoint" min-width="200">
-                  <template #default="{ row }">
-                    <span class="endpoint-method">{{ row.method }}</span>
-                    <span class="endpoint-path">{{ row.endpoint || row.path }}</span>
-                  </template>
-                </el-table-column>
-                <el-table-column :label="$t('apiTesting.aiImport.description')" prop="description" min-width="160" />
-                <el-table-column :label="$t('apiTesting.aiImport.value')" width="200">
-                  <template #default="{ row }">
-                    <el-input
-                      v-model="row.user_value"
-                      :placeholder="$t('apiTesting.aiImport.inputPlaceholder')"
-                      size="small"
-                      clearable
-                    />
-                  </template>
-                </el-table-column>
-              </el-table>
-            </div>
-
-            <!-- env_var_mapping type -->
-            <div v-else-if="question.field_type === 'env_var_mapping'" class="env-var-mapping">
-              <div
-                v-for="(envVar, evIndex) in question.variables || []"
-                :key="evIndex"
-                class="env-var-row"
-              >
-                <el-input
-                  :model-value="envVar.original_value"
-                  disabled
-                  size="small"
-                  style="width: 200px"
-                >
-                  <template #prepend>{{ $t('apiTesting.aiImport.originalValue') }}</template>
-                </el-input>
-                <el-icon class="arrow-icon"><ArrowRight /></el-icon>
-                <el-input
-                  v-model="envVar.var_name"
-                  :placeholder="$t('apiTesting.aiImport.varNamePlaceholder')"
-                  size="small"
-                  style="width: 200px"
-                >
-                  <template #prepend><span>&#123;&#123;</span></template>
-                  <template #append><span>&#125;&#125;</span></template>
-                </el-input>
-                <el-button
-                  size="small"
-                  type="danger"
-                  :icon="Delete"
-                  circle
-                  @click="removeEnvVar(question, evIndex)"
-                />
-              </div>
-              <el-button
-                size="small"
-                type="primary"
-                plain
-                @click="addEnvVar(question)"
-              >
-                {{ $t('apiTesting.aiImport.addVariable') }}
-              </el-button>
-            </div>
-          </el-card>
-        </div>
-      </div>
-
-      <!-- Step 4: Generate -->
-      <div v-show="currentStep === 4" class="step-panel">
-        <el-card>
-          <div class="generate-container">
-            <el-progress
-              :percentage="generateProgress"
-              :status="generateProgress >= 100 ? 'success' : undefined"
-              :stroke-width="12"
-              :duration="1"
-            />
-            <p class="generate-text">
-              {{ generateProgress >= 100
-                ? $t('apiTesting.aiImport.generateComplete')
-                : $t('apiTesting.aiImport.generateProgress')
-              }}
-            </p>
-            <p v-if="generateMessage" class="generate-message">{{ generateMessage }}</p>
+              {{ $t('apiTesting.common.send') }}
+            </el-button>
           </div>
         </el-card>
       </div>
 
-      <!-- Step 5: Results -->
-      <div v-show="currentStep === 5" class="result-panel">
+      <!-- Step 3: Results -->
+      <div v-show="currentStep === 3" class="result-panel">
         <div class="result-header">
           <el-icon :size="48" color="#67c23a">
             <SuccessFilled />
@@ -327,14 +215,13 @@
     <!-- Bottom navigation buttons -->
     <div class="step-actions">
       <el-button
-        v-if="currentStep > 0 && currentStep < 5"
-        :disabled="currentStep === 2"
+        v-if="currentStep > 0 && currentStep < 4"
         @click="prevStep"
       >
         {{ $t('apiTesting.aiImport.prev') }}
       </el-button>
       <el-button
-        v-if="currentStep < 4"
+        v-if="currentStep < 3"
         type="primary"
         :loading="stepLoading"
         :disabled="!canProceed"
@@ -351,14 +238,13 @@ import { ref, reactive, computed, watch, onMounted, onUnmounted, nextTick } from
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
-import { UploadFilled, ArrowRight, Delete, SuccessFilled } from '@element-plus/icons-vue'
+import { UploadFilled, ArrowRight, Delete, SuccessFilled, Monitor, UserFilled } from '@element-plus/icons-vue'
 import {
   uploadImportDocument,
   configureImport,
-  getImportQuestions,
-  submitImportAnswers,
   saveImportRequests,
-  subscribeImportProgress
+  getAgentState,
+  sendAgentReply
 } from '@/api/api-testing-import'
 import { getApiProjects, getApiCollections } from '@/api/api-testing'
 
@@ -477,69 +363,15 @@ const buildCollectionTree = (items) => {
   return roots
 }
 
-// Step 2-3: Questions
-const questions = ref([])
-const answers = ref({})
+// Agent Chat state
+const chatMessages = ref([])
+const userInput = ref('')
+const agentLoading = ref(false)
+const chatRef = ref(null)
 
-const loadQuestions = async () => {
-  if (!taskId.value) return
-  try {
-    const res = await getImportQuestions(taskId.value)
-    questions.value = res.data.questions || res.data.results || []
-    // Initialize answers
-    const initAnswers = {}
-    const envVars = {}
-    questions.value.forEach((q) => {
-      if (q.field_type === 'string' || q.field_type === 'select') {
-        initAnswers[q.id] = q.default_value || ''
-      } else if (q.field_type === 'multi_param') {
-        q.options = (q.options || []).map((p) => ({
-          ...p,
-          user_value: p.default_value || p.user_value || ''
-        }))
-      } else if (q.field_type === 'env_var_mapping') {
-        q.variables = (q.variables || q.env_vars || []).map((v) => ({
-          original_value: v.original_value || v.originalValue || '',
-          var_name: v.var_name || v.varName || ''
-        }))
-      }
-    })
-    answers.value = initAnswers
-    return true
-  } catch (error) {
-    ElMessage.error(t('apiTesting.messages.error.loadFailed'))
-    return false
-  }
-}
-
-// Step 3 helpers
-const locationTagType = (location) => {
-  const map = {
-    query: 'info',
-    header: 'warning',
-    path: 'danger',
-    body: 'success'
-  }
-  return map[location] || 'info'
-}
-
-const addEnvVar = (question) => {
-  if (!question.variables) {
-    question.variables = []
-  }
-  question.variables.push({ original_value: '', var_name: '' })
-}
-
-const removeEnvVar = (question, index) => {
-  question.variables.splice(index, 1)
-}
-
-// Step 4: Generate
-const generateProgress = ref(0)
-const generateMessage = ref('')
+// Saved results
 const savedCount = ref(0)
 const savedRequests = ref([])
-let unsubscribeSSE = null
 
 // Computed: can proceed to next step
 const canProceed = computed(() => {
@@ -551,9 +383,7 @@ const canProceed = computed(() => {
       if (!configForm.auto_structure && !configForm.collection_id) return false
       return true
     case 2:
-      return false // auto step
-    case 3:
-      return questions.value.length > 0
+      return true
     default:
       return true
   }
@@ -573,18 +403,6 @@ const nextStep = async () => {
       case 1:
         await handleConfigure()
         currentStep.value = 2
-        // Auto start analysis
-        await nextTick()
-        await handleAutoAnalysis()
-        break
-
-      case 2:
-        // Handled by auto analysis
-        break
-
-      case 3:
-        await handleSubmitAnswers()
-        currentStep.value = 4
         break
     }
   } finally {
@@ -607,120 +425,67 @@ const handleConfigure = async () => {
   })
 }
 
-const handleAutoAnalysis = async () => {
-  const success = await loadQuestions()
-  if (success && questions.value.length > 0) {
-    currentStep.value = 3
-  } else if (success) {
-    // No questions to answer, go straight to generate
-    currentStep.value = 4
-    await handleGenerate()
-  } else {
-    // Analysis failed — let the user retry from config
-    ElMessage.warning(t('apiTesting.messages.error.loadFailed'))
-    currentStep.value = 1
-  }
-}
-
-const handleSubmitAnswers = async () => {
+// Agent Chat
+const loadAgentState = async () => {
   if (!taskId.value) return
-  // Collect answers from all question types
-  const userAnswers = { ...answers.value }
-  const environmentVars = []
-
-  questions.value.forEach((q) => {
-    if (q.field_type === 'multi_param') {
-      // Each param's value is embedded in the row
-      userAnswers[q.id] = (q.options || []).map((p) => ({
-        param_name: p.param_name,
-        location: p.location,
-        value: p.user_value || p.value
-      }))
-    } else if (q.field_type === 'env_var_mapping') {
-      environmentVars.push(...(q.variables || []).map((v) => ({
-        original_value: v.original_value,
-        var_name: v.var_name
-      })))
-    }
-  })
-
-  // 转换为后端期望的字典格式
-  const envVarDict = {}
-  environmentVars.forEach(v => { envVarDict[v.original_value] = v.var_name })
-
-  await submitImportAnswers(taskId.value, {
-    user_answers: userAnswers,
-    environment_vars: envVarDict
-  })
-
-  await handleGenerate()
-}
-
-const handleGenerate = async () => {
-  if (!taskId.value) return
-  generateProgress.value = 0
-  generateMessage.value = ''
-
-  // Start SSE subscription
-  const unsubscribe = subscribeImportProgress(
-    taskId.value,
-    (data) => {
-      if (data.progress !== undefined) {
-        generateProgress.value = Math.round(data.progress)
-      }
-      if (data.message) {
-        generateMessage.value = data.message
-      }
-
-      if (data.status === 'failed') {
-        ElMessage.error(data.error_message || t('apiTesting.messages.error.saveFailed'))
-        return
-      }
-
-      if (data.status === 'completed') {
-        handleSaveResults()
-      }
-    },
-    (error) => {
-      ElMessage.error(error || t('apiTesting.messages.error.loadFailed'))
-    }
-  )
-  unsubscribeSSE = unsubscribe
-
-  // Fallback: poll for completion if SSE doesn't trigger
-  setTimeout(async () => {
-    if (currentStep.value === 4 && generateProgress.value < 100) {
-      try {
-        const saveRes = await saveImportRequests(taskId.value)
-        savedCount.value = saveRes.data?.requests_created?.length || 0
-        savedRequests.value = saveRes.data?.requests_details || []
-        generateProgress.value = 100
-        currentStep.value = 5
-      } catch (error) {
-        ElMessage.error(error.response?.data?.detail || error.response?.data?.error || t('apiTesting.messages.error.saveFailed'))
-      }
-    }
-  }, 30000) // 30s fallback
-}
-
-let isSaving = false
-const handleSaveResults = async () => {
-  if (!taskId.value || isSaving) return
-  isSaving = true
   try {
-    const res = await saveImportRequests(taskId.value)
-    savedCount.value = res.data?.requests_created?.length || 0
-    savedRequests.value = res.data?.requests_details || []
-    generateProgress.value = 100
-    currentStep.value = 5
-  } catch (error) {
-    ElMessage.error(error.response?.data?.detail || error.response?.data?.error || t('apiTesting.messages.error.saveFailed'))
+    agentLoading.value = true
+    const res = await getAgentState(taskId.value)
+    if (res.messages && res.messages.length > 0) {
+      chatMessages.value = res.messages
+    } else {
+      chatMessages.value = [{
+        role: 'agent',
+        content: `已解析文档并完成参数分析。${res.classification_summary?.manual_params > 0
+          ? `发现 ${res.classification_summary.manual_params} 个参数需要您确认，请回复提供这些参数的值。`
+          : '所有参数均可自动生成，将直接为您生成测试用例。'}`
+      }]
+    }
+  } catch (e) {
+    ElMessage.error('获取 Agent 状态失败')
   } finally {
-    isSaving = false
+    agentLoading.value = false
   }
 }
 
-// Step 5: Results actions
+const sendAgentMessage = async () => {
+  const message = userInput.value.trim()
+  if (!message || !taskId.value) return
+
+  chatMessages.value.push({ role: 'user', content: message })
+  userInput.value = ''
+  agentLoading.value = true
+
+  try {
+    const res = await sendAgentReply(taskId.value, { message })
+    if (res.messages) {
+      chatMessages.value = res.messages
+    }
+    if (res.status === 'completed') {
+      currentStep.value = 3
+      const saveRes = await saveImportRequests(taskId.value)
+      savedCount.value = saveRes.data?.requests_created?.length || 0
+      savedRequests.value = saveRes.data?.requests_details || []
+    }
+  } catch (e) {
+    ElMessage.error('Agent 处理失败')
+    chatMessages.value.push({
+      role: 'agent',
+      content: '处理出错，请稍后重试'
+    })
+  } finally {
+    agentLoading.value = false
+  }
+}
+
+// 进入 Step 2 时自动加载 Agent 状态
+watch(currentStep, (step) => {
+  if (step === 2) {
+    loadAgentState()
+  }
+})
+
+// Results actions
 const viewResults = () => {
   router.push('/api-testing/interfaces')
 }
@@ -731,19 +496,13 @@ const resetWizard = () => {
   uploading.value = false
   uploadResult.value = null
   fileList.value = []
-  questions.value = []
-  answers.value = {}
-  generateProgress.value = 0
-  generateMessage.value = ''
+  chatMessages.value = []
+  userInput.value = ''
   savedCount.value = 0
   savedRequests.value = []
   configForm.project_id = null
   configForm.auto_structure = true
   configForm.collection_id = null
-  if (unsubscribeSSE) {
-    unsubscribeSSE()
-    unsubscribeSSE = null
-  }
 }
 
 // Lifecycle
@@ -752,10 +511,7 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
-  if (unsubscribeSSE) {
-    unsubscribeSSE()
-    unsubscribeSSE = null
-  }
+  // cleanup if needed
 })
 </script>
 
@@ -1008,6 +764,74 @@ onUnmounted(() => {
 /* Project selector overflow fix */
 .step-panel .el-select {
   width: 100%;
+}
+
+/* Agent Chat */
+.agent-chat-panel {
+  max-width: 900px;
+  margin: 0 auto;
+}
+
+.chat-card {
+  min-height: 400px;
+  display: flex;
+  flex-direction: column;
+}
+
+.chat-messages {
+  flex: 1;
+  max-height: 500px;
+  overflow-y: auto;
+  padding: 16px;
+  background: #f5f7fa;
+  border-radius: 8px;
+  margin-bottom: 16px;
+}
+
+.message {
+  margin-bottom: 16px;
+}
+
+.message-bubble {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+}
+
+.user-message .message-bubble {
+  flex-direction: row-reverse;
+}
+
+.message-text {
+  padding: 8px 16px;
+  border-radius: 12px;
+  background: #fff;
+  border: 1px solid #e4e7ed;
+  max-width: 70%;
+  white-space: pre-wrap;
+  line-height: 1.5;
+}
+
+.user-message .message-text {
+  background: #409eff;
+  color: #fff;
+  border-color: #409eff;
+}
+
+.chat-input-area {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+}
+
+.chat-input-area .el-textarea {
+  flex: 1;
+}
+
+.thinking-text {
+  margin-left: 8px;
+  color: #909399;
+  font-size: 13px;
 }
 </style>
 
