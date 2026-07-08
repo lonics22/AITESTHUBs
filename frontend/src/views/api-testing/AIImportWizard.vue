@@ -431,17 +431,20 @@ const loadAgentState = async () => {
   try {
     agentLoading.value = true
     const res = await getAgentState(taskId.value)
-    if (res.messages && res.messages.length > 0) {
-      chatMessages.value = res.messages
+    const data = res.data || res
+    if (data.messages && data.messages.length > 0) {
+      chatMessages.value = data.messages
     } else {
+      const hasManual = data.classification_summary?.manual_params > 0
       chatMessages.value = [{
         role: 'agent',
-        content: `已解析文档并完成参数分析。${res.classification_summary?.manual_params > 0
-          ? `发现 ${res.classification_summary.manual_params} 个参数需要您确认，请回复提供这些参数的值。`
+        content: `已解析文档并完成参数分析。${hasManual
+          ? `发现 ${data.classification_summary.manual_params} 个参数需要您确认，请回复提供这些参数的值。`
           : '所有参数均可自动生成，将直接为您生成测试用例。'}`
       }]
     }
   } catch (e) {
+    console.error('loadAgentState error:', e)
     ElMessage.error('获取 Agent 状态失败')
   } finally {
     agentLoading.value = false
@@ -458,16 +461,25 @@ const sendAgentMessage = async () => {
 
   try {
     const res = await sendAgentReply(taskId.value, { message })
-    if (res.messages) {
-      chatMessages.value = res.messages
+    const data = res.data || res
+    if (data.messages) {
+      chatMessages.value = data.messages
     }
-    if (res.status === 'completed') {
+    if (data.status === 'completed') {
       currentStep.value = 3
-      const saveRes = await saveImportRequests(taskId.value)
-      savedCount.value = saveRes.requests_created?.length || saveRes.count || 0
-      savedRequests.value = saveRes.requests_details || []
+      try {
+        const saveRes = await saveImportRequests(taskId.value)
+        const saveData = saveRes.data || saveRes
+        savedCount.value = saveData.requests_created?.length || saveData.count || 0
+        savedRequests.value = saveData.requests_details || []
+      } catch (saveErr) {
+        console.error('save failed:', saveErr)
+        savedCount.value = 0
+        savedRequests.value = []
+      }
     }
   } catch (e) {
+    console.error('sendAgentMessage error:', e)
     ElMessage.error('Agent 处理失败')
     chatMessages.value.push({
       role: 'agent',
