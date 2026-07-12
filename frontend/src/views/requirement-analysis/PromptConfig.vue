@@ -235,6 +235,12 @@
                 @click="activeTab = 'field_classify'">
                 {{ $t('promptConfig.fieldClassifyTab') }}
               </button>
+              <button
+                class="tab-btn"
+                :class="{ active: activeTab === 'api_import' }"
+                @click="activeTab = 'api_import'">
+                {{ $t('promptConfig.apiImportTab') }}
+              </button>
             </div>
 
             <div class="tab-content">
@@ -305,6 +311,7 @@ export default {
         vision: this.$t('promptConfig.imageAnalyzer'),
         data_generator: this.$t('promptConfig.dataGeneratorPrompt'),
         field_classify: this.$t('promptConfig.fieldClassifyPrompt'),
+        api_import: this.$t('promptConfig.apiImportPrompt'),
       }
       return labels[promptType] || promptType
     },
@@ -314,7 +321,7 @@ export default {
     },
 
     getMissingPromptTypes() {
-      return ['writer', 'reviewer', 'vision', 'data_generator', 'field_classify'].filter(type => !this.getExistingPromptConfig(type))
+      return ['writer', 'reviewer', 'vision', 'data_generator', 'field_classify', 'api_import'].filter(type => !this.getExistingPromptConfig(type))
     },
 
     formatApiError(error, fallbackText) {
@@ -465,6 +472,16 @@ export default {
             name: this.$t('promptConfig.defaultFieldClassifyName'),
             prompt_type: 'field_classify',
             content: this.defaultPrompts.field_classify,
+            is_active: true
+          })
+        }
+
+        // 创建 API 导入提示词配置
+        if (missingTypes.includes('api_import') && this.defaultPrompts.api_import) {
+          await api.post('/requirement-analysis/prompts/', {
+            name: this.$t('promptConfig.defaultApiImportName'),
+            prompt_type: 'api_import',
+            content: this.defaultPrompts.api_import,
             is_active: true
           })
         }

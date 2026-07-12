@@ -8,13 +8,13 @@
     <el-steps :active="currentStep" align-center class="wizard-steps">
       <el-step :title="$t('apiTesting.aiImport.stepUpload')" />
       <el-step :title="$t('apiTesting.aiImport.stepConfig')" />
-      <el-step :title="$t('apiTesting.aiImport.stepAgent')" />
+      <el-step :title="$t('apiTesting.aiImport.stepAnalysis')" />
       <el-step :title="$t('apiTesting.aiImport.stepResults')" />
     </el-steps>
 
     <!-- Step content area -->
     <div class="step-content">
-      <!-- Step 0: Upload -->
+      <!-- ==================== Step 0: Upload ==================== -->
       <div v-show="currentStep === 0" class="step-panel">
         <el-card>
           <el-upload
@@ -65,7 +65,7 @@
         </div>
       </div>
 
-      <!-- Step 1: Config -->
+      <!-- ==================== Step 1: Config + Endpoints ==================== -->
       <div v-show="currentStep === 1" class="step-panel">
         <el-card>
           <template #header>
@@ -123,58 +123,123 @@
             </el-form-item>
           </el-form>
         </el-card>
-      </div>
 
-      <!-- Step 2: Agent Chat -->
-      <div v-show="currentStep === 2" class="step-panel agent-chat-panel">
-        <el-card class="chat-card">
-          <div class="chat-messages" ref="chatRef">
-            <div v-for="(msg, idx) in chatMessages" :key="idx"
-                 :class="['message', msg.role === 'agent' ? 'agent-message' : 'user-message']">
-              <div class="message-bubble">
-                <div class="message-avatar">
-                  <el-avatar :size="32" :icon="msg.role === 'agent' ? 'Monitor' : 'UserFilled'" />
-                </div>
-                <div class="message-content">
-                  <div class="message-text">{{ msg.content }}</div>
-                </div>
-              </div>
-            </div>
-            <div v-if="agentLoading" class="message agent-message">
-              <div class="message-bubble">
-                <div class="message-avatar">
-                  <el-avatar :size="32" icon="Monitor" />
-                </div>
-                <div class="message-content">
-                  <el-progress :percentage="100" :stroke-width="4" indeterminate />
-                  <span class="thinking-text">Agent 思考中...</span>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div class="chat-input-area">
-            <el-input
-              v-model="userInput"
-              type="textarea"
-              :rows="2"
-              :placeholder="$t('apiTesting.aiImport.chatPlaceholder')"
-              :disabled="agentLoading"
-              @keyup.enter.ctrl="sendAgentMessage"
-            />
-            <el-button
-              type="primary"
-              :loading="agentLoading"
-              :disabled="!userInput.trim()"
-              @click="sendAgentMessage"
+        <!-- Endpoint list preview -->
+        <el-card v-if="parsedEndpoints.length > 0" class="endpoint-preview-card">
+          <template #header>
+            <span>{{ $t('apiTesting.aiImport.endpointsFound').replace('个端点', '') }}{{ parsedEndpoints.length }} 个端点</span>
+          </template>
+          <el-collapse v-model="activeEndpointNames" class="endpoint-collapse">
+            <el-collapse-item
+              v-for="(ep, idx) in parsedEndpoints"
+              :key="idx"
+              :name="String(idx)"
+              :title="`${ep.method} ${ep.summary || ep.path}`"
             >
-              {{ $t('apiTesting.common.send') }}
-            </el-button>
-          </div>
+              <div class="endpoint-detail">
+                <span :class="['method-badge', ep.method?.toLowerCase()]">{{ ep.method }}</span>
+                <code class="endpoint-path">{{ ep.path }}</code>
+              </div>
+              <div v-if="ep.tags && ep.tags.length" class="endpoint-tags">
+                <el-tag v-for="tag in ep.tags" :key="tag" size="small" type="info">{{ tag }}</el-tag>
+              </div>
+              <div v-if="ep.description" class="endpoint-desc">{{ ep.description }}</div>
+            </el-collapse-item>
+          </el-collapse>
         </el-card>
       </div>
 
-      <!-- Step 3: Results -->
+      <!-- ==================== Step 2: AI Analysis Results ==================== -->
+      <div v-show="currentStep === 2" class="step-panel analysis-panel">
+        <Transition name="analysis-fade" mode="out-in">
+          <!-- Loading skeleton + SSE progress -->
+          <div v-if="analysisLoading" key="loading" class="analysis-loading-skeleton">
+            <div class="skeleton-status-bar">
+              <el-icon v-if="currentPhase !== 'complete'" class="is-loading" :size="20"><Loading /></el-icon>
+              <el-icon v-else :size="20" color="#67c23a"><SuccessFilled /></el-icon>
+              <span class="skeleton-status-text">
+                {{ sseConnected ? phaseText : $t('apiTesting.aiImport.analysisLoading') }}
+              </span>
+              <el-tag
+                v-if="reviewScore !== null"
+                :type="scoreTagType"
+                size="small"
+                effect="dark"
+                class="score-badge"
+              >
+                {{ reviewScore }}分
+              </el-tag>
+            </div>
+            <div class="skeleton-card">
+              <div class="skeleton-card-header">
+                <el-skeleton :rows="1" animated />
+              </div>
+              <div class="skeleton-card-body">
+                <el-skeleton :rows="4" animated />
+              </div>
+            </div>
+            <div class="skeleton-card">
+              <div class="skeleton-card-header">
+                <el-skeleton :rows="1" animated />
+              </div>
+              <div class="skeleton-card-body">
+                <el-skeleton :rows="3" animated />
+              </div>
+            </div>
+            <div class="skeleton-card skeleton-card-last">
+              <div class="skeleton-card-header">
+                <el-skeleton :rows="1" animated />
+              </div>
+              <div class="skeleton-card-body">
+                <el-skeleton :rows="5" animated />
+              </div>
+            </div>
+          </div>
+
+          <!-- Cards list -->
+          <div v-else key="content" class="analysis-content">
+            <!-- Stats bar -->
+            <div class="analysis-stats">
+              <el-alert
+                :title="statsText"
+                type="info"
+                :closable="false"
+                show-icon
+              />
+            </div>
+
+            <!-- Grouped by endpoint -->
+            <div v-for="(group, gIdx) in analysisGroups" :key="gIdx" class="endpoint-group">
+              <div class="endpoint-group-header" @click="toggleGroup(gIdx)">
+                <span
+                  class="group-toggle"
+                  :class="{ expanded: groupExpanded[gIdx] !== false }"
+                >&#9654;</span>
+                <el-tag :type="methodTagType(group.method)" size="small" effect="dark">{{ group.method }}</el-tag>
+                <span class="endpoint-group-path">{{ group.path }}</span>
+                <span class="endpoint-group-summary">{{ group.cases.length }} 个用例</span>
+              </div>
+              <Transition name="group-body">
+                <div v-show="groupExpanded[gIdx] !== false" class="group-body">
+                  <TestCaseCard
+                    v-for="(tc, cIdx) in group.cases"
+                    :key="cIdx"
+                    :test-case="tc"
+                    :case-index="globalCaseIndex(gIdx, cIdx)"
+                    @update:model-value="(val) => updateCase(gIdx, cIdx, val)"
+                  />
+                </div>
+              </Transition>
+            </div>
+
+            <div v-if="analysisCases.length === 0 && !analysisLoading" class="empty-state">
+              <el-empty :description="$t('apiTesting.common.noData')" />
+            </div>
+          </div>
+        </Transition>
+      </div>
+
+      <!-- ==================== Step 3: Results ==================== -->
       <div v-show="currentStep === 3" class="result-panel">
         <div class="result-header">
           <el-icon :size="48" color="#67c23a">
@@ -188,6 +253,24 @@
             <span>{{ $t('apiTesting.aiImport.generatedRequests') }}</span>
           </template>
           <el-table :data="savedRequests" max-height="400" stripe :empty-text="$t('apiTesting.common.noData')">
+            <el-table-column type="expand" width="40">
+              <template #default="{ row }">
+                <div class="request-detail-json">
+                  <div v-if="row.body && Object.keys(row.body).length" class="json-section">
+                    <strong class="json-section-title">Body</strong>
+                    <pre class="json-pre">{{ formatJSON(row.body) }}</pre>
+                  </div>
+                  <div v-if="row.headers && Object.keys(row.headers).length" class="json-section">
+                    <strong class="json-section-title">Headers</strong>
+                    <pre class="json-pre">{{ formatJSON(row.headers) }}</pre>
+                  </div>
+                  <div v-if="row.assertions && row.assertions.length" class="json-section">
+                    <strong class="json-section-title">Assertions</strong>
+                    <pre class="json-pre">{{ formatJSON(row.assertions) }}</pre>
+                  </div>
+                </div>
+              </template>
+            </el-table-column>
             <el-table-column :label="$t('apiTesting.aiImport.method')" width="90">
               <template #default="{ row }">
                 <el-tag :type="methodTagType(row.method || row.method_display)" size="small">
@@ -197,6 +280,12 @@
             </el-table-column>
             <el-table-column :label="$t('apiTesting.aiImport.name')" prop="name" min-width="200" />
             <el-table-column :label="$t('apiTesting.aiImport.path')" prop="path" min-width="250" show-overflow-tooltip />
+            <el-table-column :label="$t('apiTesting.aiImport.body')" min-width="180">
+              <template #default="{ row }">
+                <span v-if="row.body && Object.keys(row.body).length" class="body-preview">{{ bodyPreview(row.body) }}</span>
+                <span v-else class="body-empty">-</span>
+              </template>
+            </el-table-column>
             <el-table-column :label="$t('apiTesting.aiImport.collection')" min-width="150">
               <template #default="{ row }">
                 {{ row.collection_name || row.collection || '-' }}
@@ -214,53 +303,103 @@
 
     <!-- Bottom navigation buttons -->
     <div class="step-actions">
-      <el-button
-        v-if="currentStep > 0 && currentStep < 4"
-        @click="prevStep"
-      >
+      <!-- Previous: Step 1 only (Step 2 has its own prev button in content) -->
+      <el-button v-if="currentStep === 1" @click="prevStep">
         {{ $t('apiTesting.aiImport.prev') }}
       </el-button>
+
+      <!-- Step 0: Next -->
       <el-button
-        v-if="currentStep < 3"
+        v-if="currentStep === 0"
         type="primary"
-        :loading="stepLoading"
         :disabled="!canProceed"
         @click="nextStep"
       >
         {{ $t('apiTesting.aiImport.next') }}
       </el-button>
+
+      <!-- Step 1: AI Analyze -->
+      <el-button
+        v-if="currentStep === 1"
+        type="primary"
+        :loading="analyzing"
+        :disabled="!canProceed"
+        @click="startAnalysis"
+      >
+        {{ $t('apiTesting.aiImport.aiAnalyze') }}
+      </el-button>
+
+      <!-- Step 2: Save & Back buttons inside the panel -->
+      <div v-if="currentStep === 2 && !analysisLoading" class="step-actions-inner">
+        <el-button @click="prevStep">
+          {{ $t('apiTesting.aiImport.prev') }}
+        </el-button>
+        <el-button
+          type="primary"
+          :loading="saving"
+          :disabled="analysisCases.length === 0"
+          @click="confirmSave"
+        >
+          {{ $t('apiTesting.aiImport.confirmSave') }}
+        </el-button>
+      </div>
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref, reactive, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
+import { ref, reactive, computed, onMounted, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
-import { UploadFilled, ArrowRight, Delete, SuccessFilled, Monitor, UserFilled } from '@element-plus/icons-vue'
+import { UploadFilled, SuccessFilled, Loading } from '@element-plus/icons-vue'
 import {
   uploadImportDocument,
   configureImport,
-  saveImportRequests,
-  getAgentState,
-  sendAgentReply
+  analyzeImport,
+  saveImport,
+  getAnalyzeStreamUrl,
+  getImportTask
 } from '@/api/api-testing-import'
 import { getApiProjects, getApiCollections } from '@/api/api-testing'
+import TestCaseCard from '@/components/TestCaseCard.vue'
 
 const { t } = useI18n()
 const router = useRouter()
 
-// Wizard state
+// ======================== Wizard State ========================
 const currentStep = ref(0)
-const stepLoading = ref(false)
 const taskId = ref(null)
 const uploadRef = ref(null)
 const fileList = ref([])
 const uploadResult = ref(null)
 const uploading = ref(false)
+const parsedEndpoints = ref([])
+const activeEndpointNames = ref([])
 
-// File format tag colors
+// ======================== SSE Streaming State (Phase 2) ========================
+const currentPhase = ref('')
+const reviewScore = ref(null)
+const sseConnected = ref(false)
+
+const phaseText = computed(() => {
+  const map = {
+    generating: t('apiTesting.aiImport.phaseGenerating'),
+    reviewing: t('apiTesting.aiImport.phaseReviewing'),
+    retrying: t('apiTesting.aiImport.phaseRetrying'),
+    complete: t('apiTesting.aiImport.phaseComplete')
+  }
+  return map[currentPhase.value] || currentPhase.value
+})
+
+const scoreTagType = computed(() => {
+  if (reviewScore.value === null) return 'info'
+  if (reviewScore.value >= 90) return 'success'
+  if (reviewScore.value >= 60) return 'warning'
+  return 'danger'
+})
+
+// ======================== Tag Helpers ========================
 const formatTagMap = {
   swagger: 'primary',
   openapi: 'success',
@@ -273,35 +412,38 @@ const formatTagType = computed(() => {
   return formatTagMap[fmt] || 'info'
 })
 
-const methodTagMap = { GET: '', POST: 'success', PUT: 'warning', PATCH: 'warning', DELETE: 'danger' }
-const methodTagType = (method) => methodTagMap[method] || ''
+const methodTagMap = { GET: 'success', POST: 'primary', PUT: 'warning', PATCH: 'warning', DELETE: 'danger' }
+const methodTagType = (method) => methodTagMap[method?.toUpperCase()] || 'info'
 
-// Step 0: Upload handling
+// ======================== Step 0: Upload ========================
 const handleFileChange = async (file) => {
   fileList.value = [file]
   uploading.value = true
-  stepLoading.value = true
   try {
     const formData = new FormData()
     formData.append('file', file.raw || file)
     const res = await uploadImportDocument(formData)
     taskId.value = res.data.task_id || res.data.id
+    const endpoints = res.data.parsed_endpoints || []
+    parsedEndpoints.value = endpoints
+    // Auto-expand endpoint collapse
+    activeEndpointNames.value = endpoints.map((_, i) => String(i))
     uploadResult.value = {
       message: res.data.message || t('apiTesting.common.success'),
       detected_format: res.data.doc_type || 'unknown',
-      endpoint_count: (res.data.parsed_endpoints && res.data.parsed_endpoints.length) || 0
+      endpoint_count: endpoints.length
     }
   } catch (error) {
     ElMessage.error(error.response?.data?.detail || error.response?.data?.error || t('apiTesting.messages.error.loadFailed'))
     uploadResult.value = null
     fileList.value = []
+    parsedEndpoints.value = []
   } finally {
     uploading.value = false
-    stepLoading.value = false
   }
 }
 
-// Step 1: Config
+// ======================== Step 1: Config ========================
 const projects = ref([])
 const collections = ref([])
 const configForm = reactive({
@@ -339,7 +481,6 @@ const handleProjectChange = async (projectId) => {
 const loadCollections = async (projectId) => {
   try {
     const res = await getApiCollections({ project_id: projectId })
-    // Transform flat list to tree if needed
     const items = res.data.results || res.data
     collections.value = buildCollectionTree(items)
   } catch (error) {
@@ -363,141 +504,239 @@ const buildCollectionTree = (items) => {
   return roots
 }
 
-// Agent Chat state
-const chatMessages = ref([])
-const userInput = ref('')
-const agentLoading = ref(false)
-const chatRef = ref(null)
+// ======================== Step 2: AI Analysis ========================
+const analysisCases = ref([])
+const analysisLoading = ref(false)
+const analyzing = ref(false)
+const saving = ref(false)
+const groupExpanded = ref({})
 
-// Saved results
-const savedCount = ref(0)
-const savedRequests = ref([])
-
-// Computed: can proceed to next step
-const canProceed = computed(() => {
-  switch (currentStep.value) {
-    case 0:
-      return !!taskId.value
-    case 1:
-      if (!configForm.project_id) return false
-      if (!configForm.auto_structure && !configForm.collection_id) return false
-      return true
-    case 2:
-      return true
-    default:
-      return true
+// Group analysis cases by endpoint
+const analysisGroups = computed(() => {
+  const groups = {}
+  for (const tc of analysisCases.value) {
+    const key = `${tc.method || '?'} ${tc.url || tc.path || ''}`
+    if (!groups[key]) {
+      groups[key] = {
+        endpoint: key,
+        method: tc.method,
+        path: tc.url || tc.path,
+        cases: []
+      }
+    }
+    groups[key].cases.push(tc)
   }
+  return Object.values(groups)
 })
 
-// Navigation
-const nextStep = async () => {
-  stepLoading.value = true
-  try {
-    switch (currentStep.value) {
-      case 0:
-        if (taskId.value) {
-          currentStep.value = 1
-        }
-        break
+// Global case index across all groups
+const globalCaseIndex = (gIdx, cIdx) => {
+  let idx = 1
+  for (let g = 0; g < gIdx; g++) {
+    idx += analysisGroups.value[g].cases.length
+  }
+  return idx + cIdx
+}
 
-      case 1:
-        await handleConfigure()
-        currentStep.value = 2
-        break
+// Toggle endpoint group collapse
+const toggleGroup = (gIdx) => {
+  const current = groupExpanded.value[gIdx]
+  groupExpanded.value[gIdx] = current === false ? true : false
+}
+
+// Stats text
+const statsText = computed(() => {
+  const normal = analysisCases.value.filter(tc => tc._case_type === 'normal').length
+  const error = analysisCases.value.filter(tc => tc._case_type === 'error').length
+  const endpoints = analysisGroups.value.length
+  return t('apiTesting.aiImport.analysisStats', { normal, error, endpoints })
+})
+
+// Update a specific case in the flat analysisCases array
+const updateCase = (gIdx, cIdx, updatedValue) => {
+  let globalIdx = 0
+  for (let g = 0; g < gIdx; g++) {
+    globalIdx += analysisGroups.value[g].cases.length
+  }
+  globalIdx += cIdx
+  if (globalIdx < analysisCases.value.length) {
+    analysisCases.value[globalIdx] = updatedValue
+  }
+}
+
+// ======================== SSE Streaming (Phase 2) ========================
+
+/** 使用 EventSource 打开 SSE 流，返回 Promise */
+const startAnalysisStream = (taskId) => {
+  return new Promise((resolve, reject) => {
+    sseConnected.value = true
+    reviewScore.value = null
+    currentPhase.value = 'generating'
+
+    const url = getAnalyzeStreamUrl(taskId)
+    const eventSource = new EventSource(url)
+
+    // 5 分钟超时
+    const timeout = setTimeout(() => {
+      eventSource.close()
+      sseConnected.value = false
+      reject(new Error(t('apiTesting.aiImport.sseTimeout')))
+    }, 300000)
+
+    eventSource.addEventListener('phase', (e) => {
+      try {
+        currentPhase.value = JSON.parse(e.data).phase
+      } catch { /* ignore */ }
+    })
+
+    eventSource.addEventListener('review_result', (e) => {
+      try {
+        const data = JSON.parse(e.data)
+        reviewScore.value = data.total_score != null ? data.total_score : (data.scores?.total_score ?? null)
+      } catch { /* ignore */ }
+    })
+
+    eventSource.addEventListener('complete', () => {
+      clearTimeout(timeout)
+      eventSource.close()
+      sseConnected.value = false
+      resolve()
+    })
+
+    eventSource.addEventListener('error', () => {
+      // 服务端发来的 error 事件 —— 不断开连接，继续等
+    })
+
+    eventSource.onerror = () => {
+      clearTimeout(timeout)
+      eventSource.close()
+      sseConnected.value = false
+      reject(new Error(t('apiTesting.aiImport.sseConnectionFailed')))
     }
-  } finally {
-    stepLoading.value = false
-  }
-}
-
-const prevStep = () => {
-  if (currentStep.value > 0) {
-    currentStep.value--
-  }
-}
-
-const handleConfigure = async () => {
-  if (!taskId.value) return
-  await configureImport(taskId.value, {
-    project_id: configForm.project_id,
-    auto_structure: configForm.auto_structure,
-    target_collection_id: configForm.collection_id
   })
 }
 
-// Agent Chat
-const loadAgentState = async () => {
-  if (!taskId.value) return
-  try {
-    agentLoading.value = true
-    const res = await getAgentState(taskId.value)
-    const data = res.data || res
-    if (data.messages && data.messages.length > 0) {
-      chatMessages.value = data.messages
-    } else {
-      const hasManual = data.classification_summary?.manual_params > 0
-      chatMessages.value = [{
-        role: 'agent',
-        content: `已解析文档并完成参数分析。${hasManual
-          ? `发现 ${data.classification_summary.manual_params} 个参数需要您确认，请回复提供这些参数的值。`
-          : '所有参数均可自动生成，将直接为您生成测试用例。'}`
-      }]
-    }
-  } catch (e) {
-    console.error('loadAgentState error:', e)
-    ElMessage.error('获取 Agent 状态失败')
-  } finally {
-    agentLoading.value = false
-  }
-}
-
-const sendAgentMessage = async () => {
-  const message = userInput.value.trim()
-  if (!message || !taskId.value) return
-
-  chatMessages.value.push({ role: 'user', content: message })
-  userInput.value = ''
-  agentLoading.value = true
-
-  try {
-    const res = await sendAgentReply(taskId.value, { message })
-    const data = res.data || res
-    if (data.messages) {
-      chatMessages.value = data.messages
-    }
-    if (data.status === 'completed') {
-      currentStep.value = 3
-      try {
-        const saveRes = await saveImportRequests(taskId.value)
-        const saveData = saveRes.data || saveRes
-        savedCount.value = saveData.requests_created?.length || saveData.count || 0
-        savedRequests.value = saveData.requests_details || []
-      } catch (saveErr) {
-        console.error('save failed:', saveErr)
-        savedCount.value = 0
-        savedRequests.value = []
+/** 轮询回溯：SSE 断开后定时查询任务状态 */
+const startPolling = (taskId) => {
+  const pollInterval = setInterval(async () => {
+    try {
+      const res = await getImportTask(taskId)
+      const task = res.data
+      if (task.status === 'completed') {
+        clearInterval(pollInterval)
+        const cases = task.generated_summary?.generated_cases || []
+        analysisCases.value = cases.map(tc => JSON.parse(JSON.stringify(tc)))
+        analysisLoading.value = false
+      } else if (task.status === 'failed') {
+        clearInterval(pollInterval)
+        ElMessage.error(task.error_message || t('apiTesting.aiImport.errorAnalysisFailed'))
+        analysisLoading.value = false
+        currentStep.value = 1
       }
+    } catch (err) {
+      clearInterval(pollInterval)
+      analysisLoading.value = false
+      currentStep.value = 1
     }
-  } catch (e) {
-    console.error('sendAgentMessage error:', e)
-    ElMessage.error('Agent 处理失败')
-    chatMessages.value.push({
-      role: 'agent',
-      content: '处理出错，请稍后重试'
+  }, 5000)
+}
+
+// Start AI analysis — try SSE first, fallback to POST
+const startAnalysis = async () => {
+  if (!taskId.value) return
+  analyzing.value = true
+  analysisLoading.value = true
+  currentStep.value = 2 // Show step 2 loading
+
+  try {
+    // Step 1: Configure project first
+    await configureImport(taskId.value, {
+      project_id: configForm.project_id,
+      auto_structure: configForm.auto_structure,
+      target_collection_id: configForm.collection_id
     })
+
+    // Step 2: Try SSE first
+    try {
+      await startAnalysisStream(taskId.value)
+    } catch (sseError) {
+      console.warn('SSE failed, falling back to POST analyze', sseError)
+      // Fallback to POST
+      const res = await analyzeImport(taskId.value)
+      const cases = res.data.generated_cases || res.data.cases || []
+      analysisCases.value = cases.map(tc => JSON.parse(JSON.stringify(tc)))
+      await nextTick()
+      return
+    }
+
+    // Step 3: SSE succeeded — fetch generated cases from task
+    const res = await getImportTask(taskId.value)
+    const cases = res.data.generated_summary?.generated_cases || []
+    analysisCases.value = cases.map(tc => JSON.parse(JSON.stringify(tc)))
+  } catch (error) {
+    const msg = error.response?.data?.detail || error.message || t('apiTesting.aiImport.errorAnalysisFailed')
+    ElMessage.error(msg)
+    currentStep.value = 1 // Go back to config
   } finally {
-    agentLoading.value = false
+    analyzing.value = false
+    analysisLoading.value = false
   }
 }
 
-// 进入 Step 2 时自动加载 Agent 状态
-watch(currentStep, (step) => {
-  if (step === 2) {
-    loadAgentState()
-  }
-})
+// Confirm and save
+const confirmSave = async () => {
+  if (!taskId.value) return
+  saving.value = true
 
-// Results actions
+  try {
+    // Collect all cases from groups (they may have been modified by user)
+    const allCases = []
+    for (const group of analysisGroups.value) {
+      allCases.push(...group.cases)
+    }
+
+    const res = await saveImport(taskId.value, {
+      cases: allCases,
+      collection_id: configForm.auto_structure ? null : configForm.collection_id,
+      auto_structure: configForm.auto_structure
+    })
+
+    const data = res.data || res
+    savedCount.value = data.requests_created?.length || data.count || allCases.length
+    savedRequests.value = data.requests_details || []
+    currentStep.value = 3
+    ElMessage.success(t('apiTesting.aiImport.saveSuccess', { count: savedCount.value }))
+  } catch (error) {
+    const msg = error.response?.data?.detail || error.message || t('apiTesting.aiImport.errorSaveFailed')
+    ElMessage.error(msg)
+  } finally {
+    saving.value = false
+  }
+}
+
+// Format JSON string for display
+const formatJSON = (data) => {
+  if (!data) return ''
+  try {
+    return JSON.stringify(data, null, 2)
+  } catch {
+    return String(data)
+  }
+}
+
+// Short body preview for table cell
+const bodyPreview = (data) => {
+  if (!data || typeof data !== 'object') return '-'
+  const keys = Object.keys(data)
+  if (keys.length === 0) return '-'
+  const preview = JSON.stringify(data)
+  return preview.length > 60 ? preview.slice(0, 60) + '...' : preview
+}
+
+// ======================== Step 3: Results ========================
+const savedCount = ref(0)
+const savedRequests = ref([])
+
 const viewResults = () => {
   router.push('/api-testing/interfaces')
 }
@@ -508,8 +747,12 @@ const resetWizard = () => {
   uploading.value = false
   uploadResult.value = null
   fileList.value = []
-  chatMessages.value = []
-  userInput.value = ''
+  parsedEndpoints.value = []
+  activeEndpointNames.value = []
+  analysisCases.value = []
+  analysisLoading.value = false
+  analyzing.value = false
+  saving.value = false
   savedCount.value = 0
   savedRequests.value = []
   configForm.project_id = null
@@ -517,22 +760,46 @@ const resetWizard = () => {
   configForm.collection_id = null
 }
 
-// Lifecycle
-onMounted(() => {
-  loadProjects()
+// ======================== Navigation ========================
+const canProceed = computed(() => {
+  switch (currentStep.value) {
+    case 0:
+      return !!taskId.value
+    case 1:
+      if (!configForm.project_id) return false
+      if (!configForm.auto_structure && !configForm.collection_id) return false
+      return true
+    default:
+      return true
+  }
 })
 
-onUnmounted(() => {
-  // cleanup if needed
+const nextStep = () => {
+  if (currentStep.value === 0 && taskId.value) {
+    currentStep.value = 1
+  }
+}
+
+const prevStep = () => {
+  if (currentStep.value > 0) {
+    currentStep.value--
+  }
+}
+
+// ======================== Lifecycle ========================
+onMounted(() => {
+  loadProjects()
 })
 </script>
 
 <style scoped>
 .ai-import-wizard {
-  padding: 20px;
+  padding: 24px 32px;
   height: 100%;
   display: flex;
   flex-direction: column;
+  background: #f5f7fa;
+  min-height: calc(100vh - 60px);
 }
 
 .page-header {
@@ -544,12 +811,17 @@ onUnmounted(() => {
 
 .page-header h2 {
   margin: 0;
-  font-size: 20px;
-  font-weight: 500;
+  font-size: 22px;
+  font-weight: 600;
+  color: #1d2129;
 }
 
 .wizard-steps {
-  margin-bottom: 24px;
+  margin-bottom: 28px;
+  background: #fff;
+  padding: 20px 40px;
+  border-radius: 8px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
 }
 
 .step-content {
@@ -558,12 +830,14 @@ onUnmounted(() => {
   margin-bottom: 20px;
 }
 
+/* ============= Step Container ============= */
 .step-panel {
-  max-width: 800px;
+  max-width: 840px;
   margin: 0 auto;
+  width: 100%;
 }
 
-/* Upload result */
+/* ============= Upload Step ============= */
 .upload-result {
   margin-top: 16px;
 }
@@ -571,8 +845,17 @@ onUnmounted(() => {
 .result-details {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 16px;
   margin-top: 12px;
+  padding: 16px 20px;
+  background: #f0f9ff;
+  border-radius: 8px;
+}
+
+.format-badge {
+  font-size: 13px;
+  font-weight: 600;
+  text-transform: uppercase;
 }
 
 .endpoint-count {
@@ -581,7 +864,6 @@ onUnmounted(() => {
   color: #409eff;
 }
 
-/* Upload loading overlay */
 .upload-loading-overlay {
   display: flex;
   flex-direction: column;
@@ -596,7 +878,11 @@ onUnmounted(() => {
   color: #606266;
 }
 
-/* Config radio tips */
+/* ============= Config Step ============= */
+.config-card {
+  margin-bottom: 16px;
+}
+
 .radio-tip {
   margin: 4px 0 0;
   font-size: 12px;
@@ -604,25 +890,6 @@ onUnmounted(() => {
   font-weight: normal;
 }
 
-/* Analysis step — full-width, bigger loading */
-.analysis-panel {
-  max-width: 100%;
-}
-
-.analysis-loading {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  padding: 80px 0;
-}
-
-.analysis-text {
-  margin-top: 28px;
-  font-size: 18px;
-  color: #606266;
-}
-
-/* Structure radio group — vertical stack to avoid text overflow */
 .structure-radio-group {
   display: flex;
   flex-direction: column;
@@ -641,108 +908,236 @@ onUnmounted(() => {
   line-height: 1.5;
 }
 
-/* Questions */
-.questions-hint {
-  margin-bottom: 16px;
+/* Endpoint preview card */
+.endpoint-preview-card {
+  margin-top: 16px;
 }
 
-.questions-list {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
-.question-card {
-  margin-bottom: 0;
-}
-
-.question-header {
+.endpoint-preview-card .el-card__header {
   display: flex;
   align-items: center;
-  gap: 8px;
+  justify-content: space-between;
 }
 
-.question-title {
-  font-weight: 500;
-  font-size: 15px;
+.endpoint-preview-card .el-card__header span {
+  font-weight: 600;
 }
 
-.question-desc {
-  margin-top: 4px;
-  font-size: 13px;
+.endpoint-preview-card .el-card__header .ep-count-badge {
+  font-weight: 400;
+  font-size: 12px;
   color: #909399;
 }
 
-/* Multi param table */
-.multi-param-table :deep(.el-table) {
-  font-size: 13px;
+.endpoint-collapse {
+  border-top: none;
 }
 
-.endpoint-method {
-  display: inline-block;
-  padding: 0 6px;
-  border-radius: 3px;
-  font-weight: 600;
-  font-size: 11px;
-  margin-right: 6px;
-  background-color: #ecf5ff;
-  color: #409eff;
+.endpoint-detail {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
 }
+
+.method-badge {
+  display: inline-block;
+  padding: 0 8px;
+  border-radius: 4px;
+  font-weight: 700;
+  font-size: 11px;
+  line-height: 22px;
+  color: #fff;
+  min-width: 52px;
+  text-align: center;
+  letter-spacing: 0.5px;
+}
+
+.method-badge.get { background: linear-gradient(135deg, #67c23a, #85ce61); }
+.method-badge.post { background: linear-gradient(135deg, #409eff, #6ab0ff); }
+.method-badge.put { background: linear-gradient(135deg, #e6a23c, #ebb563); }
+.method-badge.patch { background: linear-gradient(135deg, #e6a23c, #ebb563); }
+.method-badge.delete { background: linear-gradient(135deg, #f56c6c, #f78989); }
 
 .endpoint-path {
-  font-family: monospace;
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 13px;
+  color: #606266;
+}
+
+.endpoint-tags {
+  display: flex;
+  gap: 4px;
+  margin-top: 6px;
+  flex-wrap: wrap;
+}
+
+.endpoint-desc {
+  margin-top: 6px;
   font-size: 12px;
+  color: #909399;
+  line-height: 1.6;
+}
+
+/* ============= Analysis Step 2 ============= */
+.analysis-panel {
+  max-width: 100%;
+}
+
+.analysis-loading-skeleton {
+  max-width: 840px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.skeleton-status-bar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 32px 0 24px;
   color: #606266;
 }
 
-/* Env var mapping */
-.env-var-mapping {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.env-var-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.arrow-icon {
-  color: #c0c4cc;
+.skeleton-status-text {
   font-size: 16px;
-}
-
-/* Generate step */
-.generate-container {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  padding: 60px 40px;
-}
-
-.generate-text {
-  margin-top: 24px;
-  font-size: 16px;
-  color: #606266;
-}
-
-.generate-message {
-  margin-top: 8px;
-  font-size: 14px;
   color: #909399;
 }
 
-/* Result step — step-panel-agnostic, full-width */
+.score-badge {
+  margin-left: 8px;
+  font-weight: 600;
+}
+
+.skeleton-card {
+  margin-bottom: 20px;
+  background: #fff;
+  border-radius: 10px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  overflow: hidden;
+}
+
+.skeleton-card-header {
+  padding: 14px 20px;
+  background: #f5f7fa;
+  border-bottom: 1px solid #ebeef5;
+}
+
+.skeleton-card-body {
+  padding: 16px 20px;
+}
+
+.skeleton-card-last {
+  opacity: 0.6;
+}
+
+/* Transition between loading skeleton and content */
+.analysis-fade-enter-active,
+.analysis-fade-leave-active {
+  transition: opacity 0.3s ease, transform 0.3s ease;
+}
+.analysis-fade-enter-from {
+  opacity: 0;
+  transform: translateY(10px);
+}
+.analysis-fade-leave-to {
+  opacity: 0;
+  transform: translateY(-10px);
+}
+
+.analysis-stats {
+  margin-bottom: 24px;
+}
+
+.analysis-stats .el-alert {
+  border-radius: 8px;
+}
+
+/* Endpoint group card */
+.endpoint-group {
+  margin-bottom: 28px;
+  background: #fff;
+  border-radius: 10px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  overflow: hidden;
+}
+
+.endpoint-group-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 20px;
+  background: linear-gradient(135deg, #f5f7fa, #f0f2f5);
+  border-bottom: 1px solid #ebeef5;
+  font-size: 14px;
+  cursor: default;
+}
+
+.endpoint-group-header .group-toggle {
+  cursor: pointer;
+  transition: transform 0.2s;
+  color: #909399;
+  font-size: 12px;
+  user-select: none;
+}
+
+.endpoint-group-header .group-toggle.expanded {
+  transform: rotate(90deg);
+}
+
+.endpoint-group-path {
+  font-family: 'Courier New', Courier, monospace;
+  font-weight: 500;
+  color: #303133;
+  flex: 1;
+  font-size: 14px;
+}
+
+.endpoint-group-summary {
+  font-size: 12px;
+  color: #909399;
+}
+
+/* Cards inside group */
+.endpoint-group .test-case-card-wrapper {
+  padding: 12px 16px 4px;
+}
+
+.endpoint-group .test-case-card-wrapper:last-child {
+  padding-bottom: 16px;
+}
+
+/* Collapsible group body */
+.group-body-enter-active,
+.group-body-leave-active {
+  transition: all 0.25s ease;
+}
+
+.group-body-enter-from,
+.group-body-leave-to {
+  opacity: 0;
+  max-height: 0;
+}
+
+.empty-state {
+  padding: 80px 0;
+  background: #fff;
+  border-radius: 10px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+}
+
+/* ============= Results Step ============= */
 .result-panel {
-  max-width: 100%;
+  max-width: 840px;
+  margin: 0 auto;
+  width: 100%;
 }
 
 .result-header {
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 20px 0;
+  padding: 24px 0 16px;
   gap: 12px;
 }
 
@@ -753,97 +1148,118 @@ onUnmounted(() => {
   color: #303133;
 }
 
+.result-header .result-subtitle {
+  color: #909399;
+  font-size: 14px;
+  margin: 0;
+}
+
 .result-list-card {
   margin-top: 20px;
+  border-radius: 10px;
 }
 
 .result-actions {
   display: flex;
   justify-content: center;
   gap: 16px;
-  margin-top: 24px;
+  margin-top: 28px;
 }
 
-/* Bottom Nav */
+/* ============= Bottom Navigation ============= */
 .step-actions {
   display: flex;
   justify-content: center;
   gap: 12px;
-  padding: 16px 0;
+  padding: 20px 0;
   border-top: 1px solid #ebeef5;
+  flex-wrap: wrap;
+  background: #fff;
+  border-radius: 0 0 8px 8px;
+  margin-top: auto;
 }
 
-/* Project selector overflow fix */
+.step-actions-inner {
+  display: flex;
+  gap: 12px;
+}
+
+/* Step card styling */
+.step-panel > .el-card,
+.step-panel .config-card {
+  border-radius: 10px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+}
+
+/* Hover effects */
+.endpoint-preview-card .el-card__body {
+  padding: 8px 16px;
+}
+
+/* Transition between steps */
+.step-panel {
+  animation: fadeInUp 0.3s ease;
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Project selector */
 .step-panel .el-select {
   width: 100%;
 }
 
-/* Agent Chat */
-.agent-chat-panel {
-  max-width: 900px;
-  margin: 0 auto;
+/* JSON detail expand styles */
+.request-detail-json {
+  padding: 12px 20px;
+  background: #fafafa;
 }
 
-.chat-card {
-  min-height: 400px;
-  display: flex;
-  flex-direction: column;
+.json-section {
+  margin-bottom: 12px;
 }
 
-.chat-messages {
-  flex: 1;
-  max-height: 500px;
-  overflow-y: auto;
-  padding: 16px;
-  background: #f5f7fa;
-  border-radius: 8px;
-  margin-bottom: 16px;
+.json-section:last-child {
+  margin-bottom: 0;
 }
 
-.message {
-  margin-bottom: 16px;
-}
-
-.message-bubble {
-  display: flex;
-  gap: 8px;
-  align-items: flex-start;
-}
-
-.user-message .message-bubble {
-  flex-direction: row-reverse;
-}
-
-.message-text {
-  padding: 8px 16px;
-  border-radius: 12px;
-  background: #fff;
-  border: 1px solid #e4e7ed;
-  max-width: 70%;
-  white-space: pre-wrap;
-  line-height: 1.5;
-}
-
-.user-message .message-text {
-  background: #409eff;
-  color: #fff;
-  border-color: #409eff;
-}
-
-.chat-input-area {
-  display: flex;
-  gap: 8px;
-  align-items: flex-start;
-}
-
-.chat-input-area .el-textarea {
-  flex: 1;
-}
-
-.thinking-text {
-  margin-left: 8px;
-  color: #909399;
+.json-section-title {
+  display: block;
+  margin-bottom: 6px;
   font-size: 13px;
+  color: #606266;
+}
+
+.json-pre {
+  margin: 0;
+  padding: 10px 14px;
+  background: #1d2129;
+  color: #e6e6e6;
+  border-radius: 6px;
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 12px;
+  line-height: 1.6;
+  overflow-x: auto;
+  white-space: pre;
+}
+
+.body-preview {
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 12px;
+  color: #606266;
+  cursor: default;
+}
+
+.body-empty {
+  color: #c0c4cc;
 }
 </style>
 

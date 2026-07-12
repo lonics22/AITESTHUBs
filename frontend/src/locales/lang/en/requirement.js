@@ -357,6 +357,7 @@ export default {
     imageAnalyzer: 'Image Analysis',
     dataGeneratorPrompt: 'Test Data Generation Prompt',
     fieldClassifyPrompt: 'Field Classification Prompt',
+    apiImportPrompt: 'API Import Prompt',
     visionPrompt: 'Image Analysis Prompt',
     defaultVisionName: 'Default Image Analysis Prompt',
     isActive: 'Enable',
@@ -392,6 +393,7 @@ export default {
     visionTab: 'Image Analysis',
     dataGeneratorTab: 'Test Data Generation',
     fieldClassifyTab: 'Field Classification',
+    apiImportTab: 'API Import',
     noContent: 'No content',
     loading: 'Loading...',
     confirmLoad: 'Confirm Load',
@@ -399,6 +401,7 @@ export default {
     defaultReviewerName: 'Default Test Case Reviewer Prompt',
     defaultDataGeneratorName: 'Default Test Data Generation Prompt',
     defaultFieldClassifyName: 'Default Field Classification Prompt',
+    defaultApiImportName: 'Default API Import Prompt',
     defaultsLoadSuccess: 'Default prompts loaded successfully',
 
     // Empty State

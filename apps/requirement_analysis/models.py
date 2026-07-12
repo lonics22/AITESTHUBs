@@ -218,6 +218,7 @@ class AIModelConfig(models.Model):
         ('browser_use_text', 'Browser Use - 文本模式'),
         ('vision', '视觉模型（LVM）'),
         ('data_generator', '测试数据生成'),
+        ('api_import', 'API导入'),
     ]
 
     name = models.CharField(max_length=100, verbose_name='配置名称')
@@ -262,6 +263,7 @@ class PromptConfig(models.Model):
         ('vision', '图片分析提示词'),
         ('data_generator', '测试数据生成提示词'),
         ('field_classify', '字段分类提示词'),
+        ('api_import', 'API导入提示词'),
     ]
 
     name = models.CharField(max_length=100, verbose_name='配置名称')

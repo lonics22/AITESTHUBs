@@ -872,20 +872,3 @@ class AIImportConfigureSerializer(serializers.Serializer):
     project_id = serializers.IntegerField(required=True)
     auto_structure = serializers.BooleanField(default=True)
     target_collection_id = serializers.IntegerField(required=False, allow_null=True)
-
-
-class AIImportAnswersSerializer(serializers.Serializer):
-    """提交用户回答序列化器"""
-    user_answers = serializers.JSONField(required=True)
-    environment_vars = serializers.JSONField(default=dict)
-
-
-class AgentReplySerializer(serializers.Serializer):
-    """Agent 回复序列化器"""
-    message = serializers.CharField(required=False, allow_blank=True, default="")
-    answers = serializers.JSONField(required=False, default=dict)
-
-    def validate_answers(self, value):
-        if not isinstance(value, dict):
-            raise serializers.ValidationError("answers 必须是对象")
-        return value

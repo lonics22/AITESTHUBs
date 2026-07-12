@@ -699,3 +699,72 @@ class AIImportTask(models.Model):
 
     def __str__(self):
         return f"AI导入-{self.doc_type or '未知格式'} ({self.get_status_display()})"
+
+
+class UserImportPreference(models.Model):
+    """用户偏好：记录用户对字段 _mode 的选择历史（Phase 3 记忆系统）
+
+    当用户在前端修改了某个字段的 _mode（如把 ai_generated 改成 user_input），
+    Saver 在保存时会记录此修改。Generator 在生成时会优先查询用户偏好。
+    """
+    MODE_CHOICES = [
+        ('user_input', '用户输入'),
+        ('ai_generated', 'AI生成'),
+        ('ask_user', '询问用户'),
+    ]
+
+    user = models.ForeignKey(User, on_delete=models.CASCADE, verbose_name='用户')
+    field_name = models.CharField(max_length=200, verbose_name='字段名')
+    endpoint_pattern = models.CharField(
+        max_length=500, blank=True, verbose_name='端点路径模式',
+        help_text='如 GET /users/{id}，留空表示匹配所有端点',
+    )
+    preferred_mode = models.CharField(
+        max_length=20, choices=MODE_CHOICES, verbose_name='偏好模式',
+    )
+    count = models.IntegerField(default=1, verbose_name='出现次数')
+    last_used = models.DateTimeField(auto_now=True, verbose_name='最后使用')
+
+    class Meta:
+        db_table = 'api_user_import_preferences'
+        verbose_name = '用户导入偏好'
+        verbose_name_plural = '用户导入偏好'
+        unique_together = ('user', 'field_name', 'endpoint_pattern')
+        indexes = [
+            models.Index(fields=['user', '-count']),
+        ]
+
+    def __str__(self):
+        return f"{self.user} - {self.field_name} -> {self.preferred_mode} (x{self.count})"
+
+
+class GenerationMemory(models.Model):
+    """成功/失败的生成案例，用于 few-shot 示例（Phase 3 记忆系统）
+
+    每次保存用例时，SaverAgent 将成功案例写入此表。
+    后续生成时，MemoryAugmentedPromptBuilder 检索相似的端点 tag 和成功案例，
+    作为 few-shot 注入 prompt。
+    """
+    task = models.ForeignKey(
+        AIImportTask, on_delete=models.SET_NULL, null=True, blank=True,
+        verbose_name='关联任务',
+    )
+    user = models.ForeignKey(User, on_delete=models.CASCADE, verbose_name='用户')
+    endpoint_key = models.CharField(max_length=500, verbose_name='端点标识')
+    endpoint_tags = models.JSONField(default=list, verbose_name='端点标签')
+    was_successful = models.BooleanField(default=True, verbose_name='是否成功')
+    review_score = models.FloatField(default=0.0, verbose_name='评审评分')
+    generated_output = models.JSONField(default=dict, verbose_name='生成的用例')
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name='创建时间')
+
+    class Meta:
+        db_table = 'api_generation_memories'
+        verbose_name = '生成记忆'
+        verbose_name_plural = '生成记忆'
+        indexes = [
+            models.Index(fields=['user', 'was_successful']),
+            models.Index(fields=['endpoint_key']),
+        ]
+
+    def __str__(self):
+        return f"{self.endpoint_key} ({'✓' if self.was_successful else '✗'} {self.review_score}分)"

@@ -1376,6 +1376,14 @@ class PromptConfigViewSet(viewsets.ModelViewSet):
             except FileNotFoundError:
                 defaults['field_classify'] = '# 任务目标\n分析 API 接口测试的入参字段...'
 
+            # 读取 API 导入提示词
+            api_import_prompt_path = os.path.join(settings.BASE_DIR, 'docs/tester_api_import.md')
+            try:
+                with open(api_import_prompt_path, 'r', encoding='utf-8') as f:
+                    defaults['api_import'] = f.read()
+            except FileNotFoundError:
+                defaults['api_import'] = '你是一位API测试用例编写专家，根据API端点定义生成带_mode标记的测试用例。'
+
             return Response({
                 'message': '默认提示词加载成功',
                 'defaults': defaults

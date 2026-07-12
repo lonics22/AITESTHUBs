@@ -1356,6 +1356,10 @@ const createEmptyRequest = () => {
 }
 
 const openCreateCollectionDialog = () => {
+  if (!selectedProject.value) {
+    ElMessage.warning('请先选择一个项目')
+    return
+  }
   showCreateCollectionDialog.value = true
 }
 
@@ -1996,7 +2000,8 @@ const createCollection = async () => {
     collectionForm.description = ''
     collectionForm.parent = null
   } catch (error) {
-    ElMessage.error('创建失败')
+    const errMsg = error?.response?.data?.project?.[0] || error?.response?.data?.detail || '创建失败'
+    ElMessage.error(errMsg)
     console.error('创建失败:', error)
   }
 }

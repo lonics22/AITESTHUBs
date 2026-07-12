@@ -67,6 +67,10 @@ db.sqlite3
 media/requirement_images/*
 !media/requirement_images/.gitkeep
 
+# 忽略 Claude Code 生成的文件
+.agents/
+skills-lock.json
+
 # 忽略敏感/临时文件
 cookie.txt
 sql.sql
@@ -74,6 +78,7 @@ _test_*.py
 _extracted*.txt
 _llm_*.txt
 _lvm_*.txt
+_req_*.txt
 
 # 忽略前端文件
 frontend/node_modules/

@@ -357,6 +357,7 @@ export default {
     imageAnalyzer: '图片分析',
     dataGeneratorPrompt: '测试数据生成提示词',
     fieldClassifyPrompt: '字段分类提示词',
+    apiImportPrompt: 'API导入提示词',
     visionPrompt: '图片分析提示词',
     defaultVisionName: '默认图片分析提示词',
     isActive: '是否启用',
@@ -392,6 +393,7 @@ export default {
     visionTab: '图片分析',
     dataGeneratorTab: '测试数据生成',
     fieldClassifyTab: '字段分类',
+    apiImportTab: 'API导入',
     noContent: '暂无内容',
     loading: '加载中...',
     confirmLoad: '确认加载',
@@ -399,6 +401,7 @@ export default {
     defaultReviewerName: '默认测试用例评审提示词',
     defaultDataGeneratorName: '默认测试数据生成提示词',
     defaultFieldClassifyName: '默认字段分类提示词',
+    defaultApiImportName: '默认API导入提示词',
     defaultsLoadSuccess: '默认提示词加载成功',
 
     // Empty State
